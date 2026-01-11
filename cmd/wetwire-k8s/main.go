@@ -27,6 +27,7 @@ func newApp() *cli.App {
 		Commands: []*cli.Command{
 			buildCommand(),
 			importCommand(),
+			validateCommand(),
 		},
 	}
 }
