@@ -20,9 +20,21 @@ func AllRules() []Rule {
 		RuleWK8042(),
 		RuleWK8101(),
 		RuleWK8102(),
+		RuleWK8103(),
+		RuleWK8104(),
+		RuleWK8105(),
 		RuleWK8201(),
 		RuleWK8202(),
+		RuleWK8203(),
+		RuleWK8204(),
+		RuleWK8205(),
+		RuleWK8207(),
+		RuleWK8208(),
+		RuleWK8209(),
 		RuleWK8301(),
+		RuleWK8302(),
+		RuleWK8303(),
+		RuleWK8304(),
 	}
 }
 
@@ -576,8 +588,78 @@ func RuleWK8006() Rule {
 		Description: "Flag :latest image tags",
 		Severity:    SeverityError,
 		Check:       checkWK8006,
-		Fix:         nil, // No auto-fix available
+		Fix:         nil, // No auto-fix available - user must specify version
 	}
+}
+
+// RuleWK8105 checks for missing ImagePullPolicy on containers.
+func RuleWK8105() Rule {
+	return Rule{
+		ID:          "WK8105",
+		Name:        "ImagePullPolicy explicit",
+		Description: "ImagePullPolicy should be explicitly set",
+		Severity:    SeverityWarning,
+		Check:       checkWK8105,
+		Fix:         nil, // Fix implemented in fixer.go
+	}
+}
+
+func checkWK8105(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		// Check if this is a Container struct
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		// Check if ImagePullPolicy is set
+		hasImagePullPolicy := false
+		var imageValue string
+		var containerPos token.Position
+
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok {
+				continue
+			}
+
+			if key.Name == "ImagePullPolicy" {
+				hasImagePullPolicy = true
+			} else if key.Name == "Image" {
+				if lit, ok := kv.Value.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					imageValue = strings.Trim(lit.Value, `"`)
+				}
+			}
+		}
+
+		containerPos = fset.Position(compLit.Pos())
+
+		if !hasImagePullPolicy && imageValue != "" {
+			issues = append(issues, Issue{
+				Rule:     "WK8105",
+				Message:  fmt.Sprintf("Container with image %q should have explicit ImagePullPolicy", imageValue),
+				File:     containerPos.Filename,
+				Line:     containerPos.Line,
+				Column:   containerPos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
 }
 
 func checkWK8006(file *ast.File, fset *token.FileSet) []Issue {
@@ -1347,4 +1429,1030 @@ func checkWK8301(file *ast.File, fset *token.FileSet) []Issue {
 	})
 
 	return issues
+}
+
+// RuleWK8103 checks that containers have a Name field.
+func RuleWK8103() Rule {
+	return Rule{
+		ID:          "WK8103",
+		Name:        "Container name required",
+		Description: "All containers must have a Name field",
+		Severity:    SeverityError,
+		Check:       checkWK8103,
+		Fix:         nil,
+	}
+}
+
+func checkWK8103(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		// Check if Name field is set
+		hasName := false
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok {
+				continue
+			}
+
+			if key.Name == "Name" {
+				// Check if it has a non-empty value
+				if lit, ok := kv.Value.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					value := strings.Trim(lit.Value, `"`)
+					if value != "" {
+						hasName = true
+					}
+				} else {
+					// Name is set via variable or other expression
+					hasName = true
+				}
+			}
+		}
+
+		if !hasName {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8103",
+				Message:  "Container must have a Name field",
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityError,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8104 checks that container and service ports are named.
+func RuleWK8104() Rule {
+	return Rule{
+		ID:          "WK8104",
+		Name:        "Port name recommended",
+		Description: "Container and Service ports should be named",
+		Severity:    SeverityWarning,
+		Check:       checkWK8104,
+		Fix:         nil,
+	}
+}
+
+func checkWK8104(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		// Check for ContainerPort or ServicePort types
+		portType := getPortType(compLit)
+		if portType == "" {
+			return true
+		}
+
+		// Check if Name field is set
+		hasName := false
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok {
+				continue
+			}
+
+			if key.Name == "Name" {
+				if lit, ok := kv.Value.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					value := strings.Trim(lit.Value, `"`)
+					if value != "" {
+						hasName = true
+					}
+				} else {
+					hasName = true
+				}
+			}
+		}
+
+		if !hasName {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8104",
+				Message:  fmt.Sprintf("%s should have a Name for better documentation and service mesh support", portType),
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// getPortType returns the port type name if it's a port type.
+func getPortType(compLit *ast.CompositeLit) string {
+	if compLit.Type == nil {
+		return ""
+	}
+
+	switch t := compLit.Type.(type) {
+	case *ast.SelectorExpr:
+		if _, ok := t.X.(*ast.Ident); ok {
+			if t.Sel.Name == "ContainerPort" || t.Sel.Name == "ServicePort" {
+				return t.Sel.Name
+			}
+		}
+	case *ast.Ident:
+		if t.Name == "ContainerPort" || t.Name == "ServicePort" {
+			return t.Name
+		}
+	}
+
+	return ""
+}
+
+// RuleWK8203 checks for ReadOnlyRootFilesystem in SecurityContext.
+func RuleWK8203() Rule {
+	return Rule{
+		ID:          "WK8203",
+		Name:        "ReadOnlyRootFilesystem",
+		Description: "Containers should set ReadOnlyRootFilesystem: true",
+		Severity:    SeverityWarning,
+		Check:       checkWK8203,
+		Fix:         nil,
+	}
+}
+
+func checkWK8203(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		// Check for SecurityContext.ReadOnlyRootFilesystem = true
+		hasReadOnlyFS := false
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "SecurityContext" {
+				continue
+			}
+
+			securityLit := unwrapCompositeLit(kv.Value)
+			if securityLit == nil {
+				continue
+			}
+
+			for _, secElt := range securityLit.Elts {
+				secKV, ok := secElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				secKey, ok := secKV.Key.(*ast.Ident)
+				if !ok || secKey.Name != "ReadOnlyRootFilesystem" {
+					continue
+				}
+
+				if isTrue(secKV.Value) {
+					hasReadOnlyFS = true
+				}
+			}
+		}
+
+		if !hasReadOnlyFS {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8203",
+				Message:  "Container should set ReadOnlyRootFilesystem: true to reduce attack surface",
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8204 checks for RunAsNonRoot in SecurityContext.
+func RuleWK8204() Rule {
+	return Rule{
+		ID:          "WK8204",
+		Name:        "RunAsNonRoot",
+		Description: "Containers should set RunAsNonRoot: true",
+		Severity:    SeverityWarning,
+		Check:       checkWK8204,
+		Fix:         nil,
+	}
+}
+
+func checkWK8204(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		// Check for SecurityContext.RunAsNonRoot = true
+		hasRunAsNonRoot := false
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "SecurityContext" {
+				continue
+			}
+
+			securityLit := unwrapCompositeLit(kv.Value)
+			if securityLit == nil {
+				continue
+			}
+
+			for _, secElt := range securityLit.Elts {
+				secKV, ok := secElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				secKey, ok := secKV.Key.(*ast.Ident)
+				if !ok || secKey.Name != "RunAsNonRoot" {
+					continue
+				}
+
+				if isTrue(secKV.Value) {
+					hasRunAsNonRoot = true
+				}
+			}
+		}
+
+		if !hasRunAsNonRoot {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8204",
+				Message:  "Container should set RunAsNonRoot: true to limit security risks",
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8205 checks for dropping capabilities in SecurityContext.
+func RuleWK8205() Rule {
+	return Rule{
+		ID:          "WK8205",
+		Name:        "Drop capabilities",
+		Description: "Containers should drop unnecessary Linux capabilities",
+		Severity:    SeverityWarning,
+		Check:       checkWK8205,
+		Fix:         nil,
+	}
+}
+
+func checkWK8205(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		// Check for SecurityContext.Capabilities.Drop with non-empty list
+		hasDropCapabilities := false
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "SecurityContext" {
+				continue
+			}
+
+			securityLit := unwrapCompositeLit(kv.Value)
+			if securityLit == nil {
+				continue
+			}
+
+			for _, secElt := range securityLit.Elts {
+				secKV, ok := secElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				secKey, ok := secKV.Key.(*ast.Ident)
+				if !ok || secKey.Name != "Capabilities" {
+					continue
+				}
+
+				capLit := unwrapCompositeLit(secKV.Value)
+				if capLit == nil {
+					continue
+				}
+
+				for _, capElt := range capLit.Elts {
+					capKV, ok := capElt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+
+					capKey, ok := capKV.Key.(*ast.Ident)
+					if !ok || capKey.Name != "Drop" {
+						continue
+					}
+
+					// Check if Drop has non-empty slice
+					if dropLit, ok := capKV.Value.(*ast.CompositeLit); ok {
+						if len(dropLit.Elts) > 0 {
+							hasDropCapabilities = true
+						}
+					}
+				}
+			}
+		}
+
+		if !hasDropCapabilities {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8205",
+				Message:  "Container should drop unnecessary capabilities (e.g., Drop: []string{\"ALL\"})",
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8207 checks for HostNetwork usage in PodSpec.
+func RuleWK8207() Rule {
+	return Rule{
+		ID:          "WK8207",
+		Name:        "No host network",
+		Description: "Pods should not use HostNetwork: true",
+		Severity:    SeverityWarning,
+		Check:       checkWK8207,
+		Fix:         nil,
+	}
+}
+
+func checkWK8207(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isPodSpecType(compLit) {
+			return true
+		}
+
+		// Check for HostNetwork = true
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "HostNetwork" {
+				continue
+			}
+
+			if isTrue(kv.Value) {
+				pos := fset.Position(kv.Pos())
+				issues = append(issues, Issue{
+					Rule:     "WK8207",
+					Message:  "Pod should not use HostNetwork: true, it bypasses network policies",
+					File:     pos.Filename,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Severity: SeverityWarning,
+				})
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8208 checks for HostPID usage in PodSpec.
+func RuleWK8208() Rule {
+	return Rule{
+		ID:          "WK8208",
+		Name:        "No host PID",
+		Description: "Pods should not use HostPID: true",
+		Severity:    SeverityWarning,
+		Check:       checkWK8208,
+		Fix:         nil,
+	}
+}
+
+func checkWK8208(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isPodSpecType(compLit) {
+			return true
+		}
+
+		// Check for HostPID = true
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "HostPID" {
+				continue
+			}
+
+			if isTrue(kv.Value) {
+				pos := fset.Position(kv.Pos())
+				issues = append(issues, Issue{
+					Rule:     "WK8208",
+					Message:  "Pod should not use HostPID: true, it allows viewing host processes",
+					File:     pos.Filename,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Severity: SeverityWarning,
+				})
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8209 checks for HostIPC usage in PodSpec.
+func RuleWK8209() Rule {
+	return Rule{
+		ID:          "WK8209",
+		Name:        "No host IPC",
+		Description: "Pods should not use HostIPC: true",
+		Severity:    SeverityWarning,
+		Check:       checkWK8209,
+		Fix:         nil,
+	}
+}
+
+func checkWK8209(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isPodSpecType(compLit) {
+			return true
+		}
+
+		// Check for HostIPC = true
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "HostIPC" {
+				continue
+			}
+
+			if isTrue(kv.Value) {
+				pos := fset.Position(kv.Pos())
+				issues = append(issues, Issue{
+					Rule:     "WK8209",
+					Message:  "Pod should not use HostIPC: true, it enables IPC with host processes",
+					File:     pos.Filename,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Severity: SeverityWarning,
+				})
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// isPodSpecType checks if a composite literal is a PodSpec type.
+func isPodSpecType(compLit *ast.CompositeLit) bool {
+	if compLit.Type == nil {
+		return false
+	}
+
+	switch t := compLit.Type.(type) {
+	case *ast.SelectorExpr:
+		if _, ok := t.X.(*ast.Ident); ok {
+			return t.Sel.Name == "PodSpec"
+		}
+	case *ast.Ident:
+		return t.Name == "PodSpec"
+	}
+
+	return false
+}
+
+// RuleWK8302 checks for minimum replicas in Deployments.
+func RuleWK8302() Rule {
+	return Rule{
+		ID:          "WK8302",
+		Name:        "Replicas minimum",
+		Description: "Deployments should have at least 2 replicas for high availability",
+		Severity:    SeverityInfo,
+		Check:       checkWK8302,
+		Fix:         nil,
+	}
+}
+
+func checkWK8302(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		resourceType := getResourceType(compLit)
+		if resourceType != "Deployment" {
+			return true
+		}
+
+		// Check for Spec.Replicas
+		replicaCount := int64(-1) // -1 means not set (defaults to 1)
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "Spec" {
+				continue
+			}
+
+			specLit := unwrapCompositeLit(kv.Value)
+			if specLit == nil {
+				continue
+			}
+
+			for _, specElt := range specLit.Elts {
+				specKV, ok := specElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				specKey, ok := specKV.Key.(*ast.Ident)
+				if !ok || specKey.Name != "Replicas" {
+					continue
+				}
+
+				// Extract replica count
+				replicaCount = extractIntValue(specKV.Value)
+			}
+		}
+
+		// Check if replicas < 2 (including not set, which defaults to 1)
+		if replicaCount < 2 {
+			pos := fset.Position(compLit.Pos())
+			msg := "Deployment should have at least 2 replicas for high availability"
+			if replicaCount == -1 {
+				msg = "Deployment should explicitly set replicas >= 2 for high availability"
+			}
+			issues = append(issues, Issue{
+				Rule:     "WK8302",
+				Message:  msg,
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityInfo,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// extractIntValue extracts an integer value from an expression.
+func extractIntValue(expr ast.Expr) int64 {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind == token.INT {
+			var val int64
+			fmt.Sscanf(e.Value, "%d", &val)
+			return val
+		}
+	case *ast.CallExpr:
+		// Handle ptrInt32(N) pattern
+		if len(e.Args) == 1 {
+			return extractIntValue(e.Args[0])
+		}
+	case *ast.UnaryExpr:
+		return extractIntValue(e.X)
+	}
+	return -1
+}
+
+// RuleWK8303 checks for PodDisruptionBudget for HA deployments.
+func RuleWK8303() Rule {
+	return Rule{
+		ID:          "WK8303",
+		Name:        "PodDisruptionBudget",
+		Description: "HA deployments should have a PodDisruptionBudget",
+		Severity:    SeverityInfo,
+		Check:       checkWK8303,
+		Fix:         nil,
+	}
+}
+
+func checkWK8303(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	// First, collect all PDB selectors in the file
+	pdbSelectors := make(map[string]bool)
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if getResourceType(compLit) != "PodDisruptionBudget" {
+			return true
+		}
+
+		// Extract selector labels from PDB
+		labels := extractPDBSelectorLabels(compLit)
+		for key, value := range labels {
+			pdbSelectors[key+"="+value] = true
+		}
+		return true
+	})
+
+	// Then check deployments
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		resourceType := getResourceType(compLit)
+		if resourceType != "Deployment" {
+			return true
+		}
+
+		// Get replica count
+		replicaCount := extractDeploymentReplicas(compLit)
+		if replicaCount < 2 {
+			// Not an HA deployment
+			return true
+		}
+
+		// Get deployment labels (selector match labels)
+		deploymentLabels := extractSelectorLabels(compLit)
+		if len(deploymentLabels) == 0 {
+			return true
+		}
+
+		// Check if any PDB matches these labels
+		hasPDB := false
+		for key, value := range deploymentLabels {
+			if pdbSelectors[key+"="+value] {
+				hasPDB = true
+				break
+			}
+		}
+
+		if !hasPDB {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8303",
+				Message:  "HA deployment (replicas >= 2) should have a PodDisruptionBudget",
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityInfo,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// extractPDBSelectorLabels extracts selector labels from a PodDisruptionBudget.
+func extractPDBSelectorLabels(compLit *ast.CompositeLit) map[string]string {
+	labels := make(map[string]string)
+
+	for _, elt := range compLit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Spec" {
+			continue
+		}
+
+		specLit := unwrapCompositeLit(kv.Value)
+		if specLit == nil {
+			continue
+		}
+
+		for _, specElt := range specLit.Elts {
+			specKV, ok := specElt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			specKey, ok := specKV.Key.(*ast.Ident)
+			if !ok || specKey.Name != "Selector" {
+				continue
+			}
+
+			selectorLit := unwrapCompositeLit(specKV.Value)
+			if selectorLit == nil {
+				continue
+			}
+
+			for _, selectorElt := range selectorLit.Elts {
+				selectorKV, ok := selectorElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				selectorKey, ok := selectorKV.Key.(*ast.Ident)
+				if !ok || selectorKey.Name != "MatchLabels" {
+					continue
+				}
+
+				return extractMapLiteral(selectorKV.Value)
+			}
+		}
+	}
+
+	return labels
+}
+
+// extractDeploymentReplicas extracts the replica count from a Deployment.
+func extractDeploymentReplicas(compLit *ast.CompositeLit) int64 {
+	for _, elt := range compLit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Spec" {
+			continue
+		}
+
+		specLit := unwrapCompositeLit(kv.Value)
+		if specLit == nil {
+			continue
+		}
+
+		for _, specElt := range specLit.Elts {
+			specKV, ok := specElt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			specKey, ok := specKV.Key.(*ast.Ident)
+			if !ok || specKey.Name != "Replicas" {
+				continue
+			}
+
+			return extractIntValue(specKV.Value)
+		}
+	}
+
+	return 1 // Default replicas
+}
+
+// RuleWK8304 checks for anti-affinity in HA deployments.
+func RuleWK8304() Rule {
+	return Rule{
+		ID:          "WK8304",
+		Name:        "Anti-affinity recommended",
+		Description: "HA deployments should use pod anti-affinity",
+		Severity:    SeverityInfo,
+		Check:       checkWK8304,
+		Fix:         nil,
+	}
+}
+
+func checkWK8304(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		resourceType := getResourceType(compLit)
+		if resourceType != "Deployment" {
+			return true
+		}
+
+		// Get replica count
+		replicaCount := extractDeploymentReplicas(compLit)
+		if replicaCount < 2 {
+			// Not an HA deployment
+			return true
+		}
+
+		// Check for PodAntiAffinity in template spec
+		hasAntiAffinity := checkForPodAntiAffinity(compLit)
+
+		if !hasAntiAffinity {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8304",
+				Message:  "HA deployment (replicas >= 2) should use pod anti-affinity to spread across nodes",
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityInfo,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// checkForPodAntiAffinity checks if a Deployment has PodAntiAffinity configured.
+func checkForPodAntiAffinity(compLit *ast.CompositeLit) bool {
+	for _, elt := range compLit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Spec" {
+			continue
+		}
+
+		specLit := unwrapCompositeLit(kv.Value)
+		if specLit == nil {
+			continue
+		}
+
+		for _, specElt := range specLit.Elts {
+			specKV, ok := specElt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			specKey, ok := specKV.Key.(*ast.Ident)
+			if !ok || specKey.Name != "Template" {
+				continue
+			}
+
+			templateLit := unwrapCompositeLit(specKV.Value)
+			if templateLit == nil {
+				continue
+			}
+
+			for _, templateElt := range templateLit.Elts {
+				templateKV, ok := templateElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				templateKey, ok := templateKV.Key.(*ast.Ident)
+				if !ok || templateKey.Name != "Spec" {
+					continue
+				}
+
+				podSpecLit := unwrapCompositeLit(templateKV.Value)
+				if podSpecLit == nil {
+					continue
+				}
+
+				for _, podSpecElt := range podSpecLit.Elts {
+					podSpecKV, ok := podSpecElt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+
+					podSpecKey, ok := podSpecKV.Key.(*ast.Ident)
+					if !ok || podSpecKey.Name != "Affinity" {
+						continue
+					}
+
+					affinityLit := unwrapCompositeLit(podSpecKV.Value)
+					if affinityLit == nil {
+						continue
+					}
+
+					for _, affinityElt := range affinityLit.Elts {
+						affinityKV, ok := affinityElt.(*ast.KeyValueExpr)
+						if !ok {
+							continue
+						}
+
+						affinityKey, ok := affinityKV.Key.(*ast.Ident)
+						if !ok {
+							continue
+						}
+
+						if affinityKey.Name == "PodAntiAffinity" {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }
