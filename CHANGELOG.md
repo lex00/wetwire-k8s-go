@@ -174,11 +174,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `internal/serialize/`: Resource serialization, edge case tests
   - Increased coverage across all packages
 
-#### Phase 7: Spec Compliance (Issues #36, #37, #38, #39)
+#### Phase 7: Spec Compliance (Issues #36, #37, #38, #39, #45, #46, #47)
 
 - **Lint CLI command** (`cmd/wetwire-k8s/lint.go`) (Issue #36)
   - `wetwire-k8s lint [PATH]` - Lint Go files with K8s resources
-  - `--fix` flag for auto-fixing violations (placeholder)
+  - `--fix` flag for auto-fixing violations (fully implemented)
   - `--format` flag supporting text, json, and github output formats
   - `--severity` flag to filter by error, warning, or info levels
   - `--disable` flag to disable specific rules (comma-separated)
@@ -192,15 +192,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/EXAMPLES.md` - Detailed walkthrough of all examples
   - `docs/VERSIONING.md` - Version compatibility and upgrade paths
 
-- **Additional lint rules** (Issue #37)
+- **Additional lint rules** (Issues #37, #45)
   - WK8041: Detect hardcoded API keys/tokens in environment variables
   - WK8042: Detect private key headers in secret data
   - WK8101: Selector label mismatch between Deployment and Service
   - WK8102: Missing recommended metadata labels (app, version)
+  - WK8103: Container name required (all containers must have a Name field)
+  - WK8104: Port name recommended (Container and Service ports should be named)
+  - WK8105: ImagePullPolicy explicit (should be explicitly set)
   - WK8201: Missing resource limits on containers
   - WK8202: Privileged containers detection
+  - WK8203: ReadOnlyRootFilesystem (containers should use read-only root filesystem)
+  - WK8204: RunAsNonRoot (containers should run as non-root)
+  - WK8205: Drop capabilities (containers should drop unnecessary Linux capabilities)
+  - WK8207: No host network (pods should not use HostNetwork: true)
+  - WK8208: No host PID (pods should not use HostPID: true)
+  - WK8209: No host IPC (pods should not use HostIPC: true)
   - WK8301: Missing health probes (liveness/readiness)
-  - Total lint rules increased from 6 to 13
+  - WK8302: Replicas minimum (deployments should have at least 2 replicas)
+  - WK8303: PodDisruptionBudget (HA deployments should have a PDB)
+  - WK8304: Anti-affinity recommended (HA deployments should use pod anti-affinity)
+  - Total lint rules increased from 6 to 25
 
 - **Test coverage improvements** (Issue #39)
   - Coverage increased from 65.1% to 92.1%
@@ -208,6 +220,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added comprehensive formatter tests (internal/lint/formatter_test.go)
   - Cross-platform path handling with filepath.Join
   - Updated docs/LINT_RULES.md with all new rules and examples
+
+- **Auto-fix functionality for lint rules** (`internal/lint/fixer.go`) (Issue #46)
+  - New Fixer type that handles automatic fixing of lint issues
+  - AST manipulation using Go's go/ast, go/parser, and go/printer packages
+  - Auto-fix for WK8105 (ImagePullPolicy): Automatically sets policy based on image tag
+  - Auto-fix for WK8002 (deeply nested structures): Extracts nested structures to variables
+  - Reports which files were modified and what fixes were applied
+  - Comprehensive test coverage in fixer_test.go
+
+- **Coverage badge** (Issue #47)
+  - Added Codecov coverage badge to README.md
 
 ### Fixed
 
