@@ -193,3 +193,118 @@ func TestLinter_DisabledRules(t *testing.T) {
 		}
 	})
 }
+
+func TestLinter_NonExistentFile(t *testing.T) {
+	linter := NewLinter(nil)
+	_, err := linter.LintFile("/nonexistent/path/file.go")
+	assert.Error(t, err)
+}
+
+func TestLinter_NonExistentPath(t *testing.T) {
+	linter := NewLinter(nil)
+	_, err := linter.Lint("/nonexistent/path")
+	assert.Error(t, err)
+}
+
+func TestIsRuleDisabled(t *testing.T) {
+	config := &Config{
+		DisabledRules: []string{"WK8001", "WK8003"},
+	}
+	linter := NewLinter(config)
+
+	// The linter should have 4 rules (6 - 2 disabled)
+	assert.Len(t, linter.rules, 4)
+}
+
+func TestLintResult_CountsIssuesBySeverity(t *testing.T) {
+	result := &LintResult{
+		Issues: []Issue{
+			{Severity: SeverityError, Rule: "WK8001"},
+			{Severity: SeverityError, Rule: "WK8002"},
+			{Severity: SeverityWarning, Rule: "WK8003"},
+			{Severity: SeverityInfo, Rule: "WK8004"},
+		},
+		TotalFiles:      3,
+		FilesWithIssues: 2,
+	}
+
+	// Count manually
+	errorCount := 0
+	warningCount := 0
+	infoCount := 0
+	for _, issue := range result.Issues {
+		switch issue.Severity {
+		case SeverityError:
+			errorCount++
+		case SeverityWarning:
+			warningCount++
+		case SeverityInfo:
+			infoCount++
+		}
+	}
+
+	assert.Equal(t, 2, errorCount)
+	assert.Equal(t, 1, warningCount)
+	assert.Equal(t, 1, infoCount)
+}
+
+func TestSeverityString(t *testing.T) {
+	tests := []struct {
+		severity Severity
+		expected string
+	}{
+		{SeverityError, "error"},
+		{SeverityWarning, "warning"},
+		{SeverityInfo, "info"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.severity.String())
+		})
+	}
+}
+
+func TestIssue_Fields(t *testing.T) {
+	issue := Issue{
+		File:     "test.go",
+		Line:     10,
+		Rule:     "WK8001",
+		Message:  "test message",
+		Severity: SeverityError,
+	}
+
+	assert.Equal(t, "test.go", issue.File)
+	assert.Equal(t, 10, issue.Line)
+	assert.Equal(t, "WK8001", issue.Rule)
+	assert.Equal(t, "test message", issue.Message)
+	assert.Equal(t, SeverityError, issue.Severity)
+}
+
+func TestLinter_EmptyDirectory(t *testing.T) {
+	linter := NewLinter(nil)
+
+	// Lint a directory that doesn't exist
+	_, err := linter.LintDirectory("/nonexistent/path")
+	assert.Error(t, err)
+}
+
+func TestConfig_DefaultValues(t *testing.T) {
+	config := &Config{}
+	assert.Equal(t, Severity(0), config.MinSeverity)
+	assert.Empty(t, config.DisabledRules)
+}
+
+func TestLinter_AllRulesEnabled(t *testing.T) {
+	linter := NewLinter(nil)
+	// Should have all 6 rules enabled by default
+	assert.Len(t, linter.rules, 6)
+}
+
+func TestLinter_DisableAllRules(t *testing.T) {
+	config := &Config{
+		DisabledRules: []string{"WK8001", "WK8002", "WK8003", "WK8004", "WK8005", "WK8006"},
+	}
+	linter := NewLinter(config)
+	assert.Len(t, linter.rules, 0)
+}

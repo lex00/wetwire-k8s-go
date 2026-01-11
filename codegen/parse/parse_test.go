@@ -251,3 +251,228 @@ func findResource(resources []ResourceType, kind, group, version string) *Resour
 	}
 	return nil
 }
+
+func TestParseProperty_Number(t *testing.T) {
+	parser := NewParser()
+
+	t.Run("number with no format", func(t *testing.T) {
+		prop := fetch.Property{
+			Type:        "number",
+			Description: "A number field",
+		}
+		result := parser.ParseProperty(prop)
+		assert.Equal(t, "number", result.Type)
+		// Default number type is float32
+		assert.Equal(t, "float32", result.GoType)
+	})
+
+	t.Run("number with double format", func(t *testing.T) {
+		prop := fetch.Property{
+			Type:   "number",
+			Format: "double",
+		}
+		result := parser.ParseProperty(prop)
+		assert.Equal(t, "float64", result.GoType)
+	})
+}
+
+func TestParseProperty_ObjectType(t *testing.T) {
+	parser := NewParser()
+
+	prop := fetch.Property{
+		Type:        "object",
+		Description: "An object field",
+	}
+	result := parser.ParseProperty(prop)
+	assert.Equal(t, "object", result.Type)
+}
+
+func TestParseProperty_ArrayWithRef(t *testing.T) {
+	parser := NewParser()
+
+	prop := fetch.Property{
+		Type: "array",
+		Items: &fetch.Property{
+			Ref: "#/definitions/io.k8s.api.core.v1.Container",
+		},
+		Description: "An array of containers",
+	}
+	result := parser.ParseProperty(prop)
+	assert.Equal(t, "array", result.Type)
+	require.NotNil(t, result.Items)
+	assert.Equal(t, "Container", result.Items.GoType)
+}
+
+func TestParseProperty_ArrayWithoutItems(t *testing.T) {
+	parser := NewParser()
+
+	prop := fetch.Property{
+		Type:        "array",
+		Description: "An array without items spec",
+	}
+	result := parser.ParseProperty(prop)
+	assert.Equal(t, "array", result.Type)
+}
+
+func TestParseProperty_UnknownType(t *testing.T) {
+	parser := NewParser()
+
+	prop := fetch.Property{
+		Type:        "customtype",
+		Description: "An unknown type",
+	}
+	result := parser.ParseProperty(prop)
+	assert.Equal(t, "customtype", result.Type)
+}
+
+func TestResourceType_GroupVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource ResourceType
+		expected string
+	}{
+		{
+			name:     "core resource",
+			resource: ResourceType{Kind: "Pod", Group: "", Version: "v1"},
+			expected: "v1",
+		},
+		{
+			name:     "apps resource",
+			resource: ResourceType{Kind: "Deployment", Group: "apps", Version: "v1"},
+			expected: "apps/v1",
+		},
+		{
+			name:     "batch resource",
+			resource: ResourceType{Kind: "Job", Group: "batch", Version: "v1"},
+			expected: "batch/v1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.resource.GroupVersion()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestResourceType_Package(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource ResourceType
+		expected string
+	}{
+		{
+			name:     "core resource",
+			resource: ResourceType{Kind: "Pod", Group: "", Version: "v1"},
+			expected: "core/v1",
+		},
+		{
+			name:     "apps resource",
+			resource: ResourceType{Kind: "Deployment", Group: "apps", Version: "v1"},
+			expected: "apps/v1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.resource.Package()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseResourceTypes_EmptySchema(t *testing.T) {
+	schema := &fetch.Schema{
+		Definitions: map[string]fetch.Definition{},
+	}
+
+	parser := NewParser()
+	resources, err := parser.ParseResourceTypes(schema)
+
+	require.NoError(t, err)
+	assert.Empty(t, resources)
+}
+
+func TestExtractRefName(t *testing.T) {
+	tests := []struct {
+		name     string
+		ref      string
+		expected string
+	}{
+		{
+			name:     "full definition ref",
+			ref:      "#/definitions/io.k8s.api.core.v1.PodSpec",
+			expected: "io.k8s.api.core.v1.PodSpec",
+		},
+		{
+			name:     "empty ref",
+			ref:      "",
+			expected: "",
+		},
+		{
+			name:     "simple ref",
+			ref:      "#/definitions/Simple",
+			expected: "Simple",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractRefName(tt.ref)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractTypeName(t *testing.T) {
+	tests := []struct {
+		name     string
+		fullName string
+		expected string
+	}{
+		{
+			name:     "full k8s definition",
+			fullName: "io.k8s.api.core.v1.PodSpec",
+			expected: "PodSpec",
+		},
+		{
+			name:     "simple name",
+			fullName: "Simple",
+			expected: "Simple",
+		},
+		{
+			name:     "empty name",
+			fullName: "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractTypeName(tt.fullName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseProperty_Int64(t *testing.T) {
+	parser := NewParser()
+
+	prop := fetch.Property{
+		Type:   "integer",
+		Format: "int64",
+	}
+	result := parser.ParseProperty(prop)
+	assert.Equal(t, "int64", result.GoType)
+}
+
+func TestParseProperty_IntegerNoFormat(t *testing.T) {
+	parser := NewParser()
+
+	prop := fetch.Property{
+		Type: "integer",
+	}
+	result := parser.ParseProperty(prop)
+	assert.Equal(t, "int32", result.GoType)
+}
