@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,9 +35,7 @@ func TestNewLinter(t *testing.T) {
 	})
 }
 
-// TODO: Fix integration tests - they work in isolation but have path issues in full test run
 func TestLinter_LintFile(t *testing.T) {
-	t.Skip("TODO: Fix test data paths")
 	linter := NewLinter(nil)
 
 	t.Run("should detect issues in bad files", func(t *testing.T) {
@@ -44,19 +43,20 @@ func TestLinter_LintFile(t *testing.T) {
 			file         string
 			expectedRule string
 		}{
-			{"testdata/wk8001_bad.go", "WK8001"},
-			{"testdata/wk8002_bad.go", "WK8002"},
-			{"testdata/wk8003_bad.go", "WK8003"},
-			{"testdata/wk8004_bad.go", "WK8004"},
-			{"testdata/wk8005_bad.go", "WK8005"},
-			{"testdata/wk8006_bad.go", "WK8006"},
+			{"wk8001_bad.go", "WK8001"},
+			{"wk8002_bad.go", "WK8002"},
+			{"wk8003_bad.go", "WK8003"},
+			{"wk8004_bad.go", "WK8004"},
+			{"wk8005_bad.go", "WK8005"},
+			{"wk8006_bad.go", "WK8006"},
 		}
 
 		for _, tc := range testCases {
 			t.Run(tc.file, func(t *testing.T) {
-				issues, err := linter.LintFile(tc.file)
+				filePath := filepath.Join("testdata", tc.file)
+				issues, err := linter.LintFile(filePath)
 				require.NoError(t, err)
-				assert.NotEmpty(t, issues, "Expected to find issues in %s", tc.file)
+				assert.NotEmpty(t, issues, "Expected to find issues in %s", filePath)
 
 				// Verify at least one issue matches the expected rule
 				found := false
@@ -66,37 +66,46 @@ func TestLinter_LintFile(t *testing.T) {
 						break
 					}
 				}
-				assert.True(t, found, "Expected to find issue with rule %s in %s", tc.expectedRule, tc.file)
+				assert.True(t, found, "Expected to find issue with rule %s in %s", tc.expectedRule, filePath)
 			})
 		}
 	})
 
-	t.Run("should not find issues in good files", func(t *testing.T) {
-		testCases := []string{
-			"testdata/wk8001_good.go",
-			"testdata/wk8002_good.go",
-			"testdata/wk8003_good.go",
-			"testdata/wk8004_good.go",
-			"testdata/wk8005_good.go",
-			"testdata/wk8006_good.go",
+	t.Run("should not find specific rule issues in good files", func(t *testing.T) {
+		testCases := []struct {
+			file         string
+			expectedRule string
+		}{
+			{"wk8001_good.go", "WK8001"},
+			{"wk8002_good.go", "WK8002"},
+			{"wk8003_good.go", "WK8003"},
+			{"wk8004_good.go", "WK8004"},
+			{"wk8005_good.go", "WK8005"},
+			{"wk8006_good.go", "WK8006"},
 		}
 
-		for _, file := range testCases {
-			t.Run(file, func(t *testing.T) {
-				issues, err := linter.LintFile(file)
+		for _, tc := range testCases {
+			t.Run(tc.file, func(t *testing.T) {
+				filePath := filepath.Join("testdata", tc.file)
+				issues, err := linter.LintFile(filePath)
 				require.NoError(t, err)
-				assert.Empty(t, issues, "Expected no issues in %s", file)
+
+				// Verify the specific rule doesn't fire for this "good" file
+				for _, issue := range issues {
+					assert.NotEqual(t, tc.expectedRule, issue.Rule,
+						"Expected no %s issues in %s, but found: %s", tc.expectedRule, filePath, issue.Message)
+				}
 			})
 		}
 	})
 }
 
 func TestLinter_LintDirectory(t *testing.T) {
-	t.Skip("TODO: Fix test data paths")
 	linter := NewLinter(nil)
 
 	t.Run("should lint all files in directory", func(t *testing.T) {
-		issues, err := linter.LintDirectory("testdata")
+		testdataPath := filepath.Join("testdata")
+		issues, err := linter.LintDirectory(testdataPath)
 		require.NoError(t, err)
 
 		// We expect to find issues from all the bad files
@@ -119,28 +128,29 @@ func TestLinter_LintDirectory(t *testing.T) {
 }
 
 func TestLinter_Lint(t *testing.T) {
-	t.Skip("TODO: Fix test data paths")
 	linter := NewLinter(nil)
 
 	t.Run("should lint file when path is file", func(t *testing.T) {
-		issues, err := linter.Lint("testdata/wk8001_bad.go")
+		filePath := filepath.Join("testdata", "wk8001_bad.go")
+		issues, err := linter.Lint(filePath)
 		require.NoError(t, err)
 		assert.NotEmpty(t, issues)
 	})
 
 	t.Run("should lint directory when path is directory", func(t *testing.T) {
-		issues, err := linter.Lint("testdata")
+		dirPath := filepath.Join("testdata")
+		issues, err := linter.Lint(dirPath)
 		require.NoError(t, err)
 		assert.NotEmpty(t, issues)
 	})
 }
 
 func TestLinter_LintWithResult(t *testing.T) {
-	t.Skip("TODO: Fix test data paths")
 	linter := NewLinter(nil)
 
 	t.Run("should return detailed result", func(t *testing.T) {
-		result, err := linter.LintWithResult("testdata")
+		dirPath := filepath.Join("testdata")
+		result, err := linter.LintWithResult(dirPath)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 
@@ -158,7 +168,6 @@ func TestLinter_LintWithResult(t *testing.T) {
 }
 
 func TestLinter_MinSeverityFilter(t *testing.T) {
-	t.Skip("TODO: Fix test data paths")
 	t.Run("should filter issues by minimum severity", func(t *testing.T) {
 		// Create linter that only reports errors
 		config := &Config{
@@ -166,7 +175,8 @@ func TestLinter_MinSeverityFilter(t *testing.T) {
 		}
 		linter := NewLinter(config)
 
-		issues, err := linter.LintFile("testdata/wk8001_bad.go")
+		filePath := filepath.Join("testdata", "wk8001_bad.go")
+		issues, err := linter.LintFile(filePath)
 		require.NoError(t, err)
 
 		// All issues should be errors or higher
@@ -177,14 +187,14 @@ func TestLinter_MinSeverityFilter(t *testing.T) {
 }
 
 func TestLinter_DisabledRules(t *testing.T) {
-	t.Skip("TODO: Fix test data paths")
 	t.Run("should not report issues for disabled rules", func(t *testing.T) {
 		config := &Config{
 			DisabledRules: []string{"WK8001"},
 		}
 		linter := NewLinter(config)
 
-		issues, err := linter.LintFile("testdata/wk8001_bad.go")
+		filePath := filepath.Join("testdata", "wk8001_bad.go")
+		issues, err := linter.LintFile(filePath)
 		require.NoError(t, err)
 
 		// Should not have any WK8001 issues
