@@ -59,6 +59,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multiple output formats (text, JSON, GitHub Actions)
   - Configurable rule disabling and minimum severity filtering
 
+#### Phase 4: Validation & Testing (Issues #8, #9, #15)
+
+- **Validate CLI command** (`cmd/wetwire-k8s/validate.go`)
+  - `wetwire-k8s validate [PATH]` - Validate Kubernetes manifests
+  - Kubeconform integration for schema validation
+  - Flags: `--schema-location`, `--strict`, `--output` (text/json/tap/junit), `--kubernetes-version`
+  - `--from-build` flag to validate manifests from build pipeline
+  - Comprehensive test coverage with 14 test cases
+
+- **Utility CLI commands** (`cmd/wetwire-k8s/`)
+  - `wetwire-k8s list [PATH]` - Discover and list K8s resources
+    - Supports `--format` (table/json/yaml) and `--all` for dependencies
+  - `wetwire-k8s init [PATH]` - Initialize new wetwire-k8s projects
+    - Creates k8s/ directory with namespace.go template
+    - Generates .wetwire.yaml configuration
+    - `--example` flag for deployment/service templates
+  - `wetwire-k8s graph [PATH]` - Visualize resource dependencies
+    - ASCII tree format (default) and DOT format for Graphviz
+    - `--output` flag to save to file
+
+- **Round-trip testing** (`internal/roundtrip/` package)
+  - YAML -> Go code -> YAML semantic equivalence testing
+  - Multi-document YAML support
+  - Normalization and comparison functions
+  - Reference YAML files in `testdata/roundtrip/examples/`
+  - Integration tests with kubernetes/examples patterns
+  - Performance benchmarks for parsing and comparison
+
 #### Phase 3: CLI Commands (Issues #5, #7, #14)
 
 - **Build CLI command** (`cmd/wetwire-k8s/build.go`)
