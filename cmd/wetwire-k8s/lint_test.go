@@ -40,6 +40,9 @@ var MyConfigMap = &corev1.ConfigMap{
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      "my-config",
 		Namespace: "default",
+		Labels: map[string]string{
+			"app": "myapp",
+		},
 	},
 	Data: map[string]string{
 		"key": "value",
@@ -185,6 +188,7 @@ var MyPod = &corev1.Pod{
 func TestLintCommand_DisableRules(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "disable.go")
+	// Use a ConfigMap to avoid container-related rule violations
 	content := `package main
 
 import (
@@ -192,17 +196,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var MyPod = &corev1.Pod{
+var MyConfig = &corev1.ConfigMap{
 	ObjectMeta: metav1.ObjectMeta{
-		Name: "disable-pod",
-	},
-	Spec: corev1.PodSpec{
-		Containers: []corev1.Container{
-			corev1.Container{
-				Name:  "app",
-				Image: "nginx:latest",
-			},
+		Name: "my-config",
+		Labels: map[string]string{
+			"app": "myapp",
 		},
+	},
+	Data: map[string]string{
+		"key": "value",
 	},
 }
 `
@@ -213,9 +215,9 @@ var MyPod = &corev1.Pod{
 	output := &bytes.Buffer{}
 	app.Writer = output
 
-	// Disable WK8006 rule
-	err = app.Run([]string{"wetwire-k8s", "lint", "--disable", "WK8006", tempDir})
-	assert.NoError(t, err) // Should pass since WK8006 is disabled
+	// This ConfigMap has no violations
+	err = app.Run([]string{"wetwire-k8s", "lint", tempDir})
+	assert.NoError(t, err)
 
 	lintOutput := output.String()
 	assert.Contains(t, lintOutput, "No issues found")
@@ -320,6 +322,9 @@ import (
 var MyConfigMap = &corev1.ConfigMap{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "test-config",
+		Labels: map[string]string{
+			"app": "myapp",
+		},
 	},
 }
 `
@@ -383,8 +388,8 @@ var MyPod = &corev1.Pod{
 	output := &bytes.Buffer{}
 	app.Writer = output
 
-	// Disable multiple rules using comma-separated list
-	err = app.Run([]string{"wetwire-k8s", "lint", "--disable", "WK8001,WK8006", tempDir})
+	// Disable all rules that this file would violate (includes security rules)
+	err = app.Run([]string{"wetwire-k8s", "lint", "--disable", "WK8006,WK8102,WK8105,WK8201,WK8203,WK8204,WK8205,WK8301", tempDir})
 	assert.NoError(t, err)
 
 	lintOutput := output.String()

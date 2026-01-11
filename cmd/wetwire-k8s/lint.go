@@ -138,16 +138,46 @@ func runLint(c *cli.Context) error {
 
 	// Handle auto-fix if requested
 	fix := c.Bool("fix")
-	if fix {
-		// Auto-fix is not fully implemented yet
-		// This is a placeholder for future implementation
-		// For now, just inform the user
+	if fix && len(result.Issues) > 0 {
 		errWriter := c.App.ErrWriter
 		if errWriter == nil {
 			errWriter = os.Stderr
 		}
-		if len(result.Issues) > 0 {
-			fmt.Fprintln(errWriter, "\nNote: Auto-fix is not yet implemented for all rules.")
+
+		// Check if there are any fixable issues
+		hasFixable := false
+		for _, issue := range result.Issues {
+			if isFixableIssue(issue.Rule) {
+				hasFixable = true
+				break
+			}
+		}
+
+		if hasFixable {
+			fmt.Fprintln(errWriter, "\nApplying auto-fixes...")
+
+			// Create fixer and apply fixes
+			fixer := lint.NewFixer(config)
+			fixResults, err := fixer.FixDirectory(absPath)
+			if err != nil {
+				fmt.Fprintf(errWriter, "Error applying fixes: %v\n", err)
+			} else {
+				// Report fixed issues
+				fixedCount := 0
+				for _, fr := range fixResults {
+					if fr.Fixed {
+						fixedCount++
+						fmt.Fprintf(errWriter, "  Fixed: [%s] %s\n", fr.Rule, fr.Description)
+					} else if fr.Error != nil {
+						fmt.Fprintf(errWriter, "  Error: %s: %v\n", fr.File, fr.Error)
+					}
+				}
+				if fixedCount > 0 {
+					fmt.Fprintf(errWriter, "\nFixed %d issue(s). Re-run lint to verify.\n", fixedCount)
+				}
+			}
+		} else {
+			fmt.Fprintln(errWriter, "\nNote: No auto-fixable issues found. Fixable rules: WK8002, WK8105")
 		}
 	}
 
@@ -157,4 +187,13 @@ func runLint(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+// isFixableIssue returns true if the rule supports auto-fix.
+func isFixableIssue(ruleID string) bool {
+	fixableRules := map[string]bool{
+		"WK8105": true, // ImagePullPolicy
+		"WK8002": true, // Deeply nested structures
+	}
+	return fixableRules[ruleID]
 }
