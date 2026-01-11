@@ -6,6 +6,8 @@ This document describes all lint rules for wetwire-k8s-go.
 
 The wetwire-k8s linter enforces flat, declarative patterns optimized for AI generation and human readability. Rules check for structural patterns, Kubernetes best practices, and security issues.
 
+**Currently implemented: 13 rules** (6 structural + 7 security/best practices)
+
 ## Rule naming convention
 
 All rules follow the format: `WK8xxx`
@@ -19,29 +21,18 @@ All rules follow the format: `WK8xxx`
 | Rule | Description | Severity | Auto-fix |
 |------|-------------|----------|----------|
 | [WK8001](#wk8001-top-level-resource-declarations) | Resources must be top-level declarations | Error | No |
-| [WK8002](#wk8002-no-nested-constructors) | No nested resource constructors | Error | Yes |
-| [WK8003](#wk8003-direct-field-references) | Use direct field references, not function calls | Error | No |
-| [WK8004](#wk8004-no-loops-in-resources) | No loops inside resource definitions | Error | No |
-| [WK8005](#wk8005-no-conditionals-in-resources) | No conditionals inside resource definitions | Error | No |
-| [WK8006](#wk8006-flat-variable-references) | Extract nested structures to variables | Warning | Yes |
-| [WK8101](#wk8101-selector-label-match) | Selector labels must match template labels | Error | No |
-| [WK8102](#wk8102-required-metadata-name) | Metadata.Name is required | Error | No |
-| [WK8103](#wk8103-container-name-required) | Container name is required | Error | No |
-| [WK8104](#wk8104-port-name-recommended) | Named ports are recommended | Warning | No |
-| [WK8105](#wk8105-image-pull-policy) | ImagePullPolicy should be explicit | Warning | Yes |
-| [WK8201](#wk8201-resource-limits-required) | Resource limits should be set | Warning | No |
-| [WK8202](#wk8202-security-context-recommended) | SecurityContext is recommended | Warning | No |
-| [WK8203](#wk8203-read-only-root-filesystem) | ReadOnlyRootFilesystem should be true | Warning | No |
-| [WK8204](#wk8204-run-as-non-root) | RunAsNonRoot should be true | Warning | No |
-| [WK8205](#wk8205-drop-capabilities) | Drop unnecessary Linux capabilities | Warning | No |
-| [WK8206](#wk8206-no-privileged-containers) | Privileged containers should not be used | Error | No |
-| [WK8207](#wk8207-no-host-network) | HostNetwork should not be used | Warning | No |
-| [WK8208](#wk8208-no-host-pid) | HostPID should not be used | Warning | No |
-| [WK8209](#wk8209-no-host-ipc) | HostIPC should not be used | Warning | No |
-| [WK8301](#wk8301-health-checks-recommended) | Health checks (liveness/readiness) recommended | Warning | No |
-| [WK8302](#wk8302-replicas-minimum) | Deployments should have at least 2 replicas | Info | No |
-| [WK8303](#wk8303-pod-disruption-budget) | PodDisruptionBudget recommended for HA | Info | No |
-| [WK8304](#wk8304-anti-affinity-recommended) | Pod anti-affinity recommended for HA | Info | No |
+| [WK8002](#wk8002-avoid-deeply-nested-structures) | Avoid deeply nested inline structures | Error | No |
+| [WK8003](#wk8003-no-duplicate-resource-names) | No duplicate resource names | Error | No |
+| [WK8004](#wk8004-circular-dependency-detection) | Circular dependency detection | Error | No |
+| [WK8005](#wk8005-flag-hardcoded-secrets) | Flag hardcoded secrets in env vars | Error | No |
+| [WK8006](#wk8006-flag-latest-image-tags) | Flag :latest image tags | Error | No |
+| [WK8041](#wk8041-hardcoded-api-keystokens) | Hardcoded API keys/tokens detected | Error | No |
+| [WK8042](#wk8042-private-key-headers) | Private key headers detected | Error | No |
+| [WK8101](#wk8101-selector-label-mismatch) | Selector labels must match template labels | Error | No |
+| [WK8102](#wk8102-missing-labels) | Resources should have metadata labels | Warning | No |
+| [WK8201](#wk8201-missing-resource-limits) | Containers should have resource limits | Warning | No |
+| [WK8202](#wk8202-privileged-containers) | Containers should not run in privileged mode | Error | No |
+| [WK8301](#wk8301-missing-health-probes) | Containers should have health probes | Warning | No |
 
 ---
 
@@ -408,6 +399,346 @@ var MyDeployment = appsv1.Deployment{
 ```
 
 **Auto-fix:** Extracts nested structures automatically.
+
+---
+
+### WK8041: Hardcoded API keys/tokens
+
+**Description:** Detects hardcoded API keys, tokens, and credentials in string literals.
+
+**Severity:** Error
+
+**Auto-fix:** No
+
+**Why:** Hardcoded API keys and tokens pose security risks and should be stored in Secrets.
+
+**Bad:**
+
+```go
+var ConfigMapWithAPIKey = corev1.ConfigMap{
+    Data: map[string]string{
+        "config.yaml": "api_key=sk_live_1234567890abcdef",
+    },
+}
+
+var PodWithBearerToken = corev1.Pod{
+    Spec: corev1.PodSpec{
+        Containers: []corev1.Container{
+            {
+                Name:  "app",
+                Image: "myapp",
+                Env: []corev1.EnvVar{
+                    {
+                        Name:  "AUTH_HEADER",
+                        Value: "Bearer eyJhbGciOi...",
+                    },
+                },
+            },
+        },
+    },
+}
+```
+
+**Good:**
+
+```go
+var PodWithSecretRef = corev1.Pod{
+    Spec: corev1.PodSpec{
+        Containers: []corev1.Container{
+            {
+                Name:  "app",
+                Image: "myapp",
+                Env: []corev1.EnvVar{
+                    {
+                        Name: "AUTH_HEADER",
+                        ValueFrom: &corev1.EnvVarSource{
+                            SecretKeyRef: &corev1.SecretKeySelector{
+                                LocalObjectReference: corev1.LocalObjectReference{
+                                    Name: "api-tokens",
+                                },
+                                Key: "bearer-token",
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+```
+
+---
+
+### WK8042: Private key headers
+
+**Description:** Detects private key headers (BEGIN PRIVATE KEY) in ConfigMaps.
+
+**Severity:** Error
+
+**Auto-fix:** No
+
+**Why:** Private keys should never be stored in ConfigMaps. Use Secrets with proper access controls.
+
+**Bad:**
+
+```go
+var ConfigMapWithRSAKey = corev1.ConfigMap{
+    Data: map[string]string{
+        "key.pem": `-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF6CKqf7oNmMcXjM1u4N+bLSxQ
+-----END RSA PRIVATE KEY-----`,
+    },
+}
+```
+
+**Good:**
+
+```go
+// Use Secret for private keys
+var SecretForPrivateKey = corev1.Secret{
+    Type: corev1.SecretTypeTLS,
+    Data: map[string][]byte{
+        "tls.key": []byte("key-data-here"),
+        "tls.crt": []byte("cert-data-here"),
+    },
+}
+
+// Or reference from external secret manager
+var PodWithSecretVolume = corev1.Pod{
+    Spec: corev1.PodSpec{
+        Volumes: []corev1.Volume{
+            {
+                Name: "tls",
+                VolumeSource: corev1.VolumeSource{
+                    Secret: &corev1.SecretVolumeSource{
+                        SecretName: "tls-secret",
+                    },
+                },
+            },
+        },
+    },
+}
+```
+
+---
+
+### WK8102: Missing labels
+
+**Description:** Resources SHOULD have metadata labels for organization and selection.
+
+**Severity:** Warning
+
+**Auto-fix:** No
+
+**Why:** Labels enable querying, grouping, and managing resources effectively.
+
+**Bad:**
+
+```go
+var DeploymentNoLabels = appsv1.Deployment{
+    ObjectMeta: metav1.ObjectMeta{
+        Name: "no-labels-deploy",
+        // No labels
+    },
+}
+```
+
+**Good:**
+
+```go
+var DeploymentWithLabels = appsv1.Deployment{
+    ObjectMeta: metav1.ObjectMeta{
+        Name: "labeled-deploy",
+        Labels: map[string]string{
+            "app":     "myapp",
+            "version": "v1",
+            "env":     "prod",
+        },
+    },
+}
+```
+
+---
+
+### WK8201: Missing resource limits
+
+**Description:** Containers SHOULD specify resource limits (CPU, memory).
+
+**Severity:** Warning
+
+**Auto-fix:** No
+
+**Why:** Resource limits prevent containers from consuming excessive cluster resources.
+
+**Bad:**
+
+```go
+var DeploymentNoLimits = appsv1.Deployment{
+    Spec: appsv1.DeploymentSpec{
+        Template: corev1.PodTemplateSpec{
+            Spec: corev1.PodSpec{
+                Containers: []corev1.Container{
+                    {
+                        Name:  "app",
+                        Image: "nginx:1.21",
+                        // No Resources specified
+                    },
+                },
+            },
+        },
+    },
+}
+```
+
+**Good:**
+
+```go
+var DeploymentWithLimits = appsv1.Deployment{
+    Spec: appsv1.DeploymentSpec{
+        Template: corev1.PodTemplateSpec{
+            Spec: corev1.PodSpec{
+                Containers: []corev1.Container{
+                    {
+                        Name:  "app",
+                        Image: "nginx:1.21",
+                        Resources: corev1.ResourceRequirements{
+                            Requests: corev1.ResourceList{
+                                "cpu":    "100m",
+                                "memory": "128Mi",
+                            },
+                            Limits: corev1.ResourceList{
+                                "cpu":    "500m",
+                                "memory": "512Mi",
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+```
+
+---
+
+### WK8202: Privileged containers
+
+**Description:** Containers MUST NOT run in privileged mode.
+
+**Severity:** Error
+
+**Auto-fix:** No
+
+**Why:** Privileged containers have full access to the host and pose significant security risks.
+
+**Bad:**
+
+```go
+var PodPrivileged = corev1.Pod{
+    Spec: corev1.PodSpec{
+        Containers: []corev1.Container{
+            {
+                Name:  "app",
+                Image: "nginx:1.21",
+                SecurityContext: &corev1.SecurityContext{
+                    Privileged: ptrBool(true),
+                },
+            },
+        },
+    },
+}
+```
+
+**Good:**
+
+```go
+var PodNotPrivileged = corev1.Pod{
+    Spec: corev1.PodSpec{
+        Containers: []corev1.Container{
+            {
+                Name:  "app",
+                Image: "nginx:1.21",
+                SecurityContext: &corev1.SecurityContext{
+                    Privileged:               ptrBool(false),
+                    RunAsNonRoot:             ptrBool(true),
+                    AllowPrivilegeEscalation: ptrBool(false),
+                },
+            },
+        },
+    },
+}
+```
+
+---
+
+### WK8301: Missing health probes
+
+**Description:** Containers SHOULD have both liveness and readiness probes.
+
+**Severity:** Warning
+
+**Auto-fix:** No
+
+**Why:** Health probes enable Kubernetes to detect and recover from failures automatically.
+
+**Bad:**
+
+```go
+var DeploymentNoProbes = appsv1.Deployment{
+    Spec: appsv1.DeploymentSpec{
+        Template: corev1.PodTemplateSpec{
+            Spec: corev1.PodSpec{
+                Containers: []corev1.Container{
+                    {
+                        Name:  "app",
+                        Image: "nginx:1.21",
+                        // No probes
+                    },
+                },
+            },
+        },
+    },
+}
+```
+
+**Good:**
+
+```go
+var DeploymentWithProbes = appsv1.Deployment{
+    Spec: appsv1.DeploymentSpec{
+        Template: corev1.PodTemplateSpec{
+            Spec: corev1.PodSpec{
+                Containers: []corev1.Container{
+                    {
+                        Name:  "app",
+                        Image: "nginx:1.21",
+                        LivenessProbe: &corev1.Probe{
+                            ProbeHandler: corev1.ProbeHandler{
+                                HTTPGet: &corev1.HTTPGetAction{
+                                    Path: "/healthz",
+                                    Port: intstr.FromInt(8080),
+                                },
+                            },
+                            InitialDelaySeconds: 10,
+                            PeriodSeconds:       10,
+                        },
+                        ReadinessProbe: &corev1.Probe{
+                            ProbeHandler: corev1.ProbeHandler{
+                                HTTPGet: &corev1.HTTPGetAction{
+                                    Path: "/ready",
+                                    Port: intstr.FromInt(8080),
+                                },
+                            },
+                            InitialDelaySeconds: 5,
+                            PeriodSeconds:       5,
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+```
 
 ---
 

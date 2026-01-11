@@ -16,6 +16,13 @@ func AllRules() []Rule {
 		RuleWK8004(),
 		RuleWK8005(),
 		RuleWK8006(),
+		RuleWK8041(),
+		RuleWK8042(),
+		RuleWK8101(),
+		RuleWK8102(),
+		RuleWK8201(),
+		RuleWK8202(),
+		RuleWK8301(),
 	}
 }
 
@@ -639,4 +646,705 @@ func isContainerType(compLit *ast.CompositeLit) bool {
 	}
 
 	return false
+}
+
+// RuleWK8041 checks for hardcoded API keys/tokens.
+func RuleWK8041() Rule {
+	return Rule{
+		ID:          "WK8041",
+		Name:        "Hardcoded API keys/tokens",
+		Description: "Hardcoded API keys/tokens detected",
+		Severity:    SeverityError,
+		Check:       checkWK8041,
+		Fix:         nil,
+	}
+}
+
+func checkWK8041(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	// Patterns to detect API keys and tokens
+	tokenPatterns := []string{
+		"Bearer ",
+		"api_key=",
+		"apikey=",
+		"token:",
+		"ghp_",      // GitHub personal token
+		"gho_",      // GitHub OAuth token
+		"ghs_",      // GitHub server token
+		"AKIA",      // AWS access key
+		"sk_live_",  // Stripe live key
+		"sk_test_",  // Stripe test key
+		"rk_live_",  // Stripe restricted key
+		"pk_live_",  // Stripe publishable key
+	}
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		// Check string literals in the AST
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+
+		value := strings.Trim(lit.Value, `"`)
+		valueLower := strings.ToLower(value)
+
+		for _, pattern := range tokenPatterns {
+			if strings.Contains(value, pattern) || strings.Contains(valueLower, strings.ToLower(pattern)) {
+				pos := fset.Position(lit.Pos())
+				issues = append(issues, Issue{
+					Rule:     "WK8041",
+					Message:  fmt.Sprintf("Hardcoded API key/token pattern detected: %q, use SecretKeyRef instead", pattern),
+					File:     pos.Filename,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Severity: SeverityError,
+				})
+				break
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8042 checks for private key headers in ConfigMaps.
+func RuleWK8042() Rule {
+	return Rule{
+		ID:          "WK8042",
+		Name:        "Private key headers",
+		Description: "Private key headers detected in ConfigMap",
+		Severity:    SeverityError,
+		Check:       checkWK8042,
+		Fix:         nil,
+	}
+}
+
+func checkWK8042(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	// Private key header patterns
+	privateKeyPatterns := []string{
+		"-----BEGIN RSA PRIVATE KEY-----",
+		"-----BEGIN PRIVATE KEY-----",
+		"-----BEGIN EC PRIVATE KEY-----",
+		"-----BEGIN OPENSSH PRIVATE KEY-----",
+		"-----BEGIN DSA PRIVATE KEY-----",
+		"-----BEGIN ENCRYPTED PRIVATE KEY-----",
+	}
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+
+		value := strings.Trim(lit.Value, "`\"")
+
+		for _, pattern := range privateKeyPatterns {
+			if strings.Contains(value, pattern) {
+				pos := fset.Position(lit.Pos())
+				issues = append(issues, Issue{
+					Rule:     "WK8042",
+					Message:  "Private key detected in configuration, use Secret instead of ConfigMap",
+					File:     pos.Filename,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Severity: SeverityError,
+				})
+				break
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8101 checks for selector label mismatch in Deployments/StatefulSets/DaemonSets.
+func RuleWK8101() Rule {
+	return Rule{
+		ID:          "WK8101",
+		Name:        "Selector label mismatch",
+		Description: "Deployment selector labels must match template labels",
+		Severity:    SeverityError,
+		Check:       checkWK8101,
+		Fix:         nil,
+	}
+}
+
+func checkWK8101(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		// Check if this is a Deployment, StatefulSet, or DaemonSet
+		resourceType := getResourceType(compLit)
+		if resourceType != "Deployment" && resourceType != "StatefulSet" && resourceType != "DaemonSet" {
+			return true
+		}
+
+		// Extract selector and template labels
+		selectorLabels := extractSelectorLabels(compLit)
+		templateLabels := extractTemplateLabels(compLit)
+
+		if len(selectorLabels) == 0 || len(templateLabels) == 0 {
+			return true
+		}
+
+		// Check if all selector labels are present in template labels
+		for key, selectorValue := range selectorLabels {
+			templateValue, exists := templateLabels[key]
+			if !exists {
+				pos := fset.Position(compLit.Pos())
+				issues = append(issues, Issue{
+					Rule:     "WK8101",
+					Message:  fmt.Sprintf("Selector label %q not found in template labels", key),
+					File:     pos.Filename,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Severity: SeverityError,
+				})
+			} else if selectorValue != templateValue && selectorValue != "" && templateValue != "" {
+				pos := fset.Position(compLit.Pos())
+				issues = append(issues, Issue{
+					Rule:     "WK8101",
+					Message:  fmt.Sprintf("Selector label %q has value %q but template has %q", key, selectorValue, templateValue),
+					File:     pos.Filename,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Severity: SeverityError,
+				})
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// getResourceType returns the type name of a composite literal.
+func getResourceType(compLit *ast.CompositeLit) string {
+	if compLit.Type == nil {
+		return ""
+	}
+
+	switch t := compLit.Type.(type) {
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	case *ast.Ident:
+		return t.Name
+	}
+
+	return ""
+}
+
+// extractSelectorLabels extracts selector labels from a resource spec.
+func extractSelectorLabels(compLit *ast.CompositeLit) map[string]string {
+	labels := make(map[string]string)
+
+	// Look for Spec.Selector.MatchLabels
+	for _, elt := range compLit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Spec" {
+			continue
+		}
+
+		specLit := unwrapCompositeLit(kv.Value)
+		if specLit == nil {
+			continue
+		}
+
+		for _, specElt := range specLit.Elts {
+			specKV, ok := specElt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			specKey, ok := specKV.Key.(*ast.Ident)
+			if !ok || specKey.Name != "Selector" {
+				continue
+			}
+
+			selectorLit := unwrapCompositeLit(specKV.Value)
+			if selectorLit == nil {
+				continue
+			}
+
+			for _, selectorElt := range selectorLit.Elts {
+				selectorKV, ok := selectorElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				selectorKey, ok := selectorKV.Key.(*ast.Ident)
+				if !ok || selectorKey.Name != "MatchLabels" {
+					continue
+				}
+
+				matchLabels := extractMapLiteral(selectorKV.Value)
+				return matchLabels
+			}
+		}
+	}
+
+	return labels
+}
+
+// extractTemplateLabels extracts template labels from a resource spec.
+func extractTemplateLabels(compLit *ast.CompositeLit) map[string]string {
+	labels := make(map[string]string)
+
+	// Look for Spec.Template.Metadata.Labels or Spec.Template.ObjectMeta.Labels
+	for _, elt := range compLit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Spec" {
+			continue
+		}
+
+		specLit := unwrapCompositeLit(kv.Value)
+		if specLit == nil {
+			continue
+		}
+
+		for _, specElt := range specLit.Elts {
+			specKV, ok := specElt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			specKey, ok := specKV.Key.(*ast.Ident)
+			if !ok || specKey.Name != "Template" {
+				continue
+			}
+
+			templateLit := unwrapCompositeLit(specKV.Value)
+			if templateLit == nil {
+				continue
+			}
+
+			for _, templateElt := range templateLit.Elts {
+				templateKV, ok := templateElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				templateKey, ok := templateKV.Key.(*ast.Ident)
+				if !ok || (templateKey.Name != "Metadata" && templateKey.Name != "ObjectMeta") {
+					continue
+				}
+
+				metadataLit := unwrapCompositeLit(templateKV.Value)
+				if metadataLit == nil {
+					continue
+				}
+
+				for _, metadataElt := range metadataLit.Elts {
+					metadataKV, ok := metadataElt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+
+					metadataKey, ok := metadataKV.Key.(*ast.Ident)
+					if !ok || metadataKey.Name != "Labels" {
+						continue
+					}
+
+					return extractMapLiteral(metadataKV.Value)
+				}
+			}
+		}
+	}
+
+	return labels
+}
+
+// extractMapLiteral extracts string key-value pairs from a map literal.
+func extractMapLiteral(expr ast.Expr) map[string]string {
+	result := make(map[string]string)
+
+	compLit := unwrapCompositeLit(expr)
+	if compLit == nil {
+		return result
+	}
+
+	for _, elt := range compLit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+
+		keyLit, ok := kv.Key.(*ast.BasicLit)
+		if !ok || keyLit.Kind != token.STRING {
+			continue
+		}
+
+		valueLit, ok := kv.Value.(*ast.BasicLit)
+		if !ok || valueLit.Kind != token.STRING {
+			continue
+		}
+
+		key := strings.Trim(keyLit.Value, `"`)
+		value := strings.Trim(valueLit.Value, `"`)
+		result[key] = value
+	}
+
+	return result
+}
+
+// RuleWK8102 checks for missing labels on resources.
+func RuleWK8102() Rule {
+	return Rule{
+		ID:          "WK8102",
+		Name:        "Missing labels",
+		Description: "Resources should have metadata labels",
+		Severity:    SeverityWarning,
+		Check:       checkWK8102,
+		Fix:         nil,
+	}
+}
+
+func checkWK8102(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	// K8s resource types that should have labels
+	resourceTypes := map[string]bool{
+		"Deployment":  true,
+		"Service":     true,
+		"Pod":         true,
+		"ConfigMap":   true,
+		"Secret":      true,
+		"StatefulSet": true,
+		"DaemonSet":   true,
+		"Ingress":     true,
+		"Job":         true,
+		"CronJob":     true,
+	}
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		resourceType := getResourceType(compLit)
+		if !resourceTypes[resourceType] {
+			return true
+		}
+
+		// Check if ObjectMeta/Metadata has Labels field
+		hasLabels := false
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || (key.Name != "Metadata" && key.Name != "ObjectMeta") {
+				continue
+			}
+
+			metadataLit := unwrapCompositeLit(kv.Value)
+			if metadataLit == nil {
+				continue
+			}
+
+			for _, metaElt := range metadataLit.Elts {
+				metaKV, ok := metaElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				metaKey, ok := metaKV.Key.(*ast.Ident)
+				if !ok || metaKey.Name != "Labels" {
+					continue
+				}
+
+				// Check if labels map is not empty
+				labelsMap := extractMapLiteral(metaKV.Value)
+				if len(labelsMap) > 0 {
+					hasLabels = true
+				}
+			}
+		}
+
+		if !hasLabels {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8102",
+				Message:  fmt.Sprintf("%s should have metadata labels for better organization", resourceType),
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8201 checks for missing resource limits on containers.
+func RuleWK8201() Rule {
+	return Rule{
+		ID:          "WK8201",
+		Name:        "Missing resource limits",
+		Description: "Containers should have resource limits",
+		Severity:    SeverityWarning,
+		Check:       checkWK8201,
+		Fix:         nil,
+	}
+}
+
+func checkWK8201(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		// Check if container has Resources field with Limits
+		hasLimits := false
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "Resources" {
+				continue
+			}
+
+			resourcesLit := unwrapCompositeLit(kv.Value)
+			if resourcesLit == nil {
+				continue
+			}
+
+			for _, resElt := range resourcesLit.Elts {
+				resKV, ok := resElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				resKey, ok := resKV.Key.(*ast.Ident)
+				if !ok || resKey.Name != "Limits" {
+					continue
+				}
+
+				// Check if Limits is not empty
+				limitsLit := unwrapCompositeLit(resKV.Value)
+				if limitsLit != nil && len(limitsLit.Elts) > 0 {
+					hasLimits = true
+				}
+			}
+		}
+
+		if !hasLimits {
+			pos := fset.Position(compLit.Pos())
+			issues = append(issues, Issue{
+				Rule:     "WK8201",
+				Message:  "Container should have resource limits (cpu, memory) to prevent resource exhaustion",
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// RuleWK8202 checks for privileged containers.
+func RuleWK8202() Rule {
+	return Rule{
+		ID:          "WK8202",
+		Name:        "Privileged containers",
+		Description: "Containers should not run in privileged mode",
+		Severity:    SeverityError,
+		Check:       checkWK8202,
+		Fix:         nil,
+	}
+}
+
+func checkWK8202(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		// Check if container has SecurityContext.Privileged = true
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "SecurityContext" {
+				continue
+			}
+
+			securityLit := unwrapCompositeLit(kv.Value)
+			if securityLit == nil {
+				continue
+			}
+
+			for _, secElt := range securityLit.Elts {
+				secKV, ok := secElt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+
+				secKey, ok := secKV.Key.(*ast.Ident)
+				if !ok || secKey.Name != "Privileged" {
+					continue
+				}
+
+				// Check if value is true (through function call or literal)
+				if isTrue(secKV.Value) {
+					pos := fset.Position(compLit.Pos())
+					issues = append(issues, Issue{
+						Rule:     "WK8202",
+						Message:  "Container should not run in privileged mode, it has full access to the host",
+						File:     pos.Filename,
+						Line:     pos.Line,
+						Column:   pos.Column,
+						Severity: SeverityError,
+					})
+				}
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// isTrue checks if an expression evaluates to true.
+func isTrue(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name == "true"
+	case *ast.CallExpr:
+		// Check for ptrBool(true) pattern
+		if len(e.Args) == 1 {
+			if ident, ok := e.Args[0].(*ast.Ident); ok {
+				return ident.Name == "true"
+			}
+		}
+	case *ast.UnaryExpr:
+		// Handle &true or similar
+		return isTrue(e.X)
+	}
+	return false
+}
+
+// RuleWK8301 checks for missing health probes on containers.
+func RuleWK8301() Rule {
+	return Rule{
+		ID:          "WK8301",
+		Name:        "Missing health probes",
+		Description: "Containers should have liveness and readiness probes",
+		Severity:    SeverityWarning,
+		Check:       checkWK8301,
+		Fix:         nil,
+	}
+}
+
+func checkWK8301(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		compLit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if !isContainerType(compLit) {
+			return true
+		}
+
+		hasLiveness := false
+		hasReadiness := false
+
+		for _, elt := range compLit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok {
+				continue
+			}
+
+			if key.Name == "LivenessProbe" {
+				hasLiveness = true
+			} else if key.Name == "ReadinessProbe" {
+				hasReadiness = true
+			}
+		}
+
+		if !hasLiveness || !hasReadiness {
+			pos := fset.Position(compLit.Pos())
+			missing := []string{}
+			if !hasLiveness {
+				missing = append(missing, "liveness")
+			}
+			if !hasReadiness {
+				missing = append(missing, "readiness")
+			}
+			issues = append(issues, Issue{
+				Rule:     "WK8301",
+				Message:  fmt.Sprintf("Container should have %s probe(s) for automatic failure detection", strings.Join(missing, " and ")),
+				File:     pos.Filename,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Severity: SeverityWarning,
+			})
+		}
+
+		return true
+	})
+
+	return issues
 }

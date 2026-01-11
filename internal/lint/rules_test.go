@@ -201,8 +201,8 @@ func TestWK8006_FlagLatestImageTags(t *testing.T) {
 func TestAllRules(t *testing.T) {
 	rules := AllRules()
 
-	t.Run("should have all 6 rules", func(t *testing.T) {
-		assert.Len(t, rules, 6, "Expected 6 rules")
+	t.Run("should have all 13 rules", func(t *testing.T) {
+		assert.Len(t, rules, 13, "Expected 13 rules")
 	})
 
 	t.Run("all rules should have required fields", func(t *testing.T) {
