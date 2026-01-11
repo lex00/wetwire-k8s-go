@@ -174,6 +174,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `internal/serialize/`: Resource serialization, edge case tests
   - Increased coverage across all packages
 
+#### Phase 7: Spec Compliance (Issues #36, #37, #38, #39)
+
+- **Lint CLI command** (`cmd/wetwire-k8s/lint.go`) (Issue #36)
+  - `wetwire-k8s lint [PATH]` - Lint Go files with K8s resources
+  - `--fix` flag for auto-fixing violations (placeholder)
+  - `--format` flag supporting text, json, and github output formats
+  - `--severity` flag to filter by error, warning, or info levels
+  - `--disable` flag to disable specific rules (comma-separated)
+  - Fixed severity filtering bug in internal/lint/lint.go
+
+- **Recommended documentation** (Issue #38)
+  - `docs/IMPORT_WORKFLOW.md` - Step-by-step import process
+  - `docs/CODEGEN.md` - Code generation pipeline explanation
+  - `docs/ADOPTION.md` - Migration guide from Helm/kustomize/kubectl
+  - `docs/DEVELOPERS.md` - Development environment and contribution guide
+  - `docs/EXAMPLES.md` - Detailed walkthrough of all examples
+  - `docs/VERSIONING.md` - Version compatibility and upgrade paths
+
 ### Fixed
 
 - CI workflow now conditionally runs round-trip tests based on directory existence
