@@ -192,6 +192,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/EXAMPLES.md` - Detailed walkthrough of all examples
   - `docs/VERSIONING.md` - Version compatibility and upgrade paths
 
+- **Additional lint rules** (Issue #37)
+  - WK8041: Detect hardcoded API keys/tokens in environment variables
+  - WK8042: Detect private key headers in secret data
+  - WK8101: Selector label mismatch between Deployment and Service
+  - WK8102: Missing recommended metadata labels (app, version)
+  - WK8201: Missing resource limits on containers
+  - WK8202: Privileged containers detection
+  - WK8301: Missing health probes (liveness/readiness)
+  - Total lint rules increased from 6 to 13
+
+- **Test coverage improvements** (Issue #39)
+  - Coverage increased from 65.1% to 92.1%
+  - Fixed skipped tests in internal/lint/lint_test.go
+  - Added comprehensive formatter tests (internal/lint/formatter_test.go)
+  - Cross-platform path handling with filepath.Join
+  - Updated docs/LINT_RULES.md with all new rules and examples
+
 ### Fixed
 
 - CI workflow now conditionally runs round-trip tests based on directory existence
