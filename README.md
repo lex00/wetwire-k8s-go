@@ -113,14 +113,20 @@ kubectl apply -f manifests.yaml
 
 ## AI-assisted development
 
-Use with [Claude Code](https://claude.ai/claude-code) for AI-assisted development:
+Use with [Claude Code](https://claude.ai/claude-code) for AI-assisted development via the MCP (Model Context Protocol) server.
 
-1. Install the MCP server:
+### Installation
+
+Install the MCP server binary:
+
 ```bash
 go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s-mcp@latest
 ```
 
-2. Configure in Claude Code settings:
+### Configuration
+
+Add to your Claude Code MCP settings file (`~/.claude/claude_desktop_config.json` or similar):
+
 ```json
 {
   "mcpServers": {
@@ -131,7 +137,39 @@ go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s-mcp@latest
 }
 ```
 
-3. Ask Claude to generate Kubernetes resources - it has access to build, lint, validate, and import tools.
+For debugging, set the `WETWIRE_MCP_DEBUG` environment variable:
+
+```json
+{
+  "mcpServers": {
+    "wetwire-k8s": {
+      "command": "wetwire-k8s-mcp",
+      "env": {
+        "WETWIRE_MCP_DEBUG": "1"
+      }
+    }
+  }
+}
+```
+
+### Available Tools
+
+The MCP server exposes the following tools to Claude:
+
+| Tool | Description |
+|------|-------------|
+| **build** | Generate Kubernetes YAML/JSON manifests from Go code |
+| **lint** | Check Go files for wetwire-k8s patterns and best practices |
+| **import** | Convert Kubernetes YAML manifests to Go code |
+| **validate** | Validate manifests against Kubernetes schemas (requires kubeconform) |
+
+### Usage Examples
+
+Once configured, ask Claude to:
+- "Build manifests from the ./k8s directory"
+- "Import this deployment YAML to Go code"
+- "Lint my Kubernetes Go files for issues"
+- "Validate this YAML against Kubernetes 1.29 schema"
 
 ## Examples
 
