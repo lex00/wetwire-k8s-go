@@ -26,6 +26,7 @@ func newApp() *cli.App {
 		Version: Version,
 		Commands: []*cli.Command{
 			buildCommand(),
+			importCommand(),
 		},
 	}
 }
