@@ -28,6 +28,9 @@ func newApp() *cli.App {
 			buildCommand(),
 			importCommand(),
 			validateCommand(),
+			listCommand(),
+			initCommand(),
+			graphCommand(),
 		},
 	}
 }
