@@ -119,6 +119,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `examples/configmap-secret/` - ConfigMap and Secret usage patterns
   - All examples compile, follow wetwire pattern, include README
 
+#### Phase 6: Agent Integration (Issues #11, #12)
+
+- **Design CLI command** (`cmd/wetwire-k8s/design.go`)
+  - `wetwire-k8s design --prompt "description"` - AI-assisted K8s generation
+  - Provider selection: `--provider anthropic|kiro`
+  - K8sRunnerAgent with domain-specific tools:
+    - `init_package`: Create package directories
+    - `write_file`: Generate Go files with lint state tracking
+    - `read_file`: Read existing files
+    - `run_lint`: Run wetwire-k8s linter (JSON output)
+    - `run_build`: Build Kubernetes YAML manifests
+    - `ask_developer`: Clarifying questions
+  - Lint enforcement per Wetwire Spec 6.3 (lint-after-write rule)
+  - Completion gate checks (lint called, passed, no pending)
+  - K8s-specific system prompt with wetwire patterns
+
+- **Test CLI command** (`cmd/wetwire-k8s/test.go`)
+  - `wetwire-k8s test --persona <name>` - Persona-based testing
+  - 5 standard personas: beginner, intermediate, expert, terse, verbose
+  - 5 scoring dimensions: Completeness, Lint Quality, Code Quality, Output Validity, Question Efficiency
+  - Flags: `--persona`, `--provider`, `--all-personas`, `--scenario`, `--mock`, `--dry-run`, `--verbose`
+  - Output files: RESULTS.md, session.json, score.json
+  - Integration with wetwire-core-go personas/scoring/results packages
+
 #### Phase 3: CLI Commands (Issues #5, #7, #14)
 
 - **Build CLI command** (`cmd/wetwire-k8s/build.go`)
