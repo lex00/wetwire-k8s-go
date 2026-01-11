@@ -59,6 +59,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multiple output formats (text, JSON, GitHub Actions)
   - Configurable rule disabling and minimum severity filtering
 
+#### Phase 3: CLI Commands (Issues #5, #7, #14)
+
+- **Build CLI command** (`cmd/wetwire-k8s/build.go`)
+  - `wetwire-k8s build [PATH]` - Generate Kubernetes YAML/JSON from Go code
+  - Flags: `--output/-o`, `--format/-f` (yaml/json), `--dry-run`
+  - API version mapping for all core Kubernetes resource types
+  - Multi-resource output with YAML document separators
+  - Integration with build pipeline for dependency ordering
+  - Built on urfave/cli/v2 framework
+
+- **Import CLI command** (`cmd/wetwire-k8s/import.go`)
+  - `wetwire-k8s import <file>` - Convert YAML manifests to Go code
+  - Flags: `--output/-o`, `--package/-p`, `--var-prefix`
+  - Supports multi-document YAML files
+  - Generates idiomatic Go using k8s.io/api types
+  - Proper variable naming from resource metadata
+  - stdin support with `-` as file argument
+
+- **Internal importer package** (`internal/importer/`)
+  - Parse YAML manifests to structured resource info
+  - Generate Go code with proper imports and type references
+  - Map Kubernetes apiVersion/kind to Go package/type
+  - Support for ConfigMap, Deployment, Service, Namespace, and more
+
+- **Comprehensive unit test coverage** (Issue #14)
+  - `codegen/fetch/`: Error handling, context cancellation tests
+  - `codegen/parse/`: Property type tests, helper function tests
+  - `internal/lint/`: Rule disabling, severity filtering tests
+  - `internal/serialize/`: Resource serialization, edge case tests
+  - Increased coverage across all packages
+
 ### Fixed
 
 - CI workflow now conditionally runs round-trip tests based on directory existence
