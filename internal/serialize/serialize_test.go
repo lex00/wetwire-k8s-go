@@ -442,3 +442,247 @@ func TestComplexResource(t *testing.T) {
 	assert.Contains(t, yamlStr, "replicas: 3")
 	assert.Contains(t, yamlStr, "nginx:1.21")
 }
+
+// TestToYAML_NilResource tests YAML output for nil resource
+func TestToYAML_NilResource(t *testing.T) {
+	_, err := ToYAML(nil)
+	assert.Error(t, err)
+}
+
+// TestToJSON_NilResource tests JSON output for nil resource
+func TestToJSON_NilResource(t *testing.T) {
+	_, err := ToJSON(nil)
+	assert.Error(t, err)
+}
+
+// TestSerializeConfigMap tests ConfigMap serialization
+func TestSerializeConfigMap(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-config",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"key1": "value1",
+			"key2": "value2",
+		},
+	}
+
+	got, err := Serialize(cm)
+	require.NoError(t, err)
+
+	assert.Equal(t, "v1", got["apiVersion"])
+	assert.Equal(t, "ConfigMap", got["kind"])
+
+	data, ok := got["data"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "value1", data["key1"])
+	assert.Equal(t, "value2", data["key2"])
+}
+
+// TestSerializeSecret tests Secret serialization
+func TestSerializeSecret(t *testing.T) {
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "default",
+		},
+		Type: corev1.SecretTypeOpaque,
+		StringData: map[string]string{
+			"username": "admin",
+			"password": "secret",
+		},
+	}
+
+	got, err := Serialize(secret)
+	require.NoError(t, err)
+
+	assert.Equal(t, "v1", got["apiVersion"])
+	assert.Equal(t, "Secret", got["kind"])
+	assert.Equal(t, "Opaque", got["type"])
+}
+
+// TestToMultiYAML_OrderPreservation tests that resources are output in order
+func TestToMultiYAML_OrderPreservation(t *testing.T) {
+	resources := []interface{}{
+		&corev1.Service{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
+			ObjectMeta: metav1.ObjectMeta{Name: "first"},
+		},
+		&appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
+			ObjectMeta: metav1.ObjectMeta{Name: "second"},
+		},
+		&corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+			ObjectMeta: metav1.ObjectMeta{Name: "third"},
+		},
+	}
+
+	yaml, err := ToMultiYAML(resources)
+	require.NoError(t, err)
+
+	yamlStr := string(yaml)
+
+	// Check order by finding positions
+	firstIdx := strings.Index(yamlStr, "name: first")
+	secondIdx := strings.Index(yamlStr, "name: second")
+	thirdIdx := strings.Index(yamlStr, "name: third")
+
+	assert.Less(t, firstIdx, secondIdx)
+	assert.Less(t, secondIdx, thirdIdx)
+}
+
+// TestSerializeStatefulSet tests StatefulSet serialization
+func TestSerializeStatefulSet(t *testing.T) {
+	replicas := int32(3)
+	ss := &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "apps/v1",
+			Kind:       "StatefulSet",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas:    &replicas,
+			ServiceName: "test-service",
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx"},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := Serialize(ss)
+	require.NoError(t, err)
+
+	assert.Equal(t, "apps/v1", got["apiVersion"])
+	assert.Equal(t, "StatefulSet", got["kind"])
+
+	spec, ok := got["spec"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "test-service", spec["serviceName"])
+}
+
+// TestSerializeDaemonSet tests DaemonSet serialization
+func TestSerializeDaemonSet(t *testing.T) {
+	ds := &appsv1.DaemonSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "apps/v1",
+			Kind:       "DaemonSet",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-daemonset",
+			Namespace: "kube-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"name": "fluentd"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"name": "fluentd"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "fluentd", Image: "fluentd:latest"},
+					},
+				},
+			},
+		},
+	}
+
+	yaml, err := ToYAML(ds)
+	require.NoError(t, err)
+
+	yamlStr := string(yaml)
+	assert.Contains(t, yamlStr, "kind: DaemonSet")
+	assert.Contains(t, yamlStr, "test-daemonset")
+	assert.Contains(t, yamlStr, "kube-system")
+}
+
+// TestSerializePod tests Pod serialization
+func TestSerializePod(t *testing.T) {
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "nginx",
+					Image: "nginx:1.21",
+					Ports: []corev1.ContainerPort{
+						{ContainerPort: 80},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := Serialize(pod)
+	require.NoError(t, err)
+
+	assert.Equal(t, "v1", got["apiVersion"])
+	assert.Equal(t, "Pod", got["kind"])
+}
+
+// TestSerializeReplicaSet tests ReplicaSet serialization
+func TestSerializeReplicaSet(t *testing.T) {
+	replicas := int32(3)
+	rs := &appsv1.ReplicaSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "apps/v1",
+			Kind:       "ReplicaSet",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-replicaset",
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx", Image: "nginx"},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := Serialize(rs)
+	require.NoError(t, err)
+
+	assert.Equal(t, "apps/v1", got["apiVersion"])
+	assert.Equal(t, "ReplicaSet", got["kind"])
+}
