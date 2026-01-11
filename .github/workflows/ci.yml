@@ -24,8 +24,8 @@ jobs:
 
       - name: Test
         run: |
-          # Exclude cmd packages from coverage (empty main stubs cause coverage tool errors)
-          go test -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/cmd/')
+          # Exclude cmd and examples packages from coverage (empty main stubs cause coverage tool errors)
+          go test -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/cmd/' | grep -v '/examples/')
         env:
           SKIP_KIRO_TESTS: "1"
 
