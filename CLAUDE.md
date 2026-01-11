@@ -370,7 +370,6 @@ This gives Claude Code access to:
 - `lint` - Check and fix code
 - `validate` - Validate schemas
 - `import` - Convert YAML to Go
-- `graph` - Visualize dependencies
 
 ## See also
 
