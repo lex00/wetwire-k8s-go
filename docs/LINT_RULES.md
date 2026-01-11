@@ -6,7 +6,7 @@ This document describes all lint rules for wetwire-k8s-go.
 
 The wetwire-k8s linter enforces flat, declarative patterns optimized for AI generation and human readability. Rules check for structural patterns, Kubernetes best practices, and security issues.
 
-**Currently implemented: 13 rules** (6 structural + 7 security/best practices)
+**Currently implemented: 25 rules** (14 structural/naming + 11 security/availability best practices)
 
 ## Rule naming convention
 
@@ -30,9 +30,21 @@ All rules follow the format: `WK8xxx`
 | [WK8042](#wk8042-private-key-headers) | Private key headers detected | Error | No |
 | [WK8101](#wk8101-selector-label-mismatch) | Selector labels must match template labels | Error | No |
 | [WK8102](#wk8102-missing-labels) | Resources should have metadata labels | Warning | No |
+| [WK8103](#wk8103-container-name-required) | Containers must have a Name field | Error | No |
+| [WK8104](#wk8104-port-name-recommended) | Container and Service ports should be named | Warning | No |
+| [WK8105](#wk8105-imagepullpolicy-explicit) | ImagePullPolicy should be explicitly set | Warning | Yes |
 | [WK8201](#wk8201-missing-resource-limits) | Containers should have resource limits | Warning | No |
 | [WK8202](#wk8202-privileged-containers) | Containers should not run in privileged mode | Error | No |
+| [WK8203](#wk8203-readonlyrootfilesystem) | Containers should set ReadOnlyRootFilesystem | Warning | No |
+| [WK8204](#wk8204-runasnonroot) | Containers should set RunAsNonRoot | Warning | No |
+| [WK8205](#wk8205-drop-capabilities) | Containers should drop Linux capabilities | Warning | No |
+| [WK8207](#wk8207-no-host-network) | Pods should not use HostNetwork | Warning | No |
+| [WK8208](#wk8208-no-host-pid) | Pods should not use HostPID | Warning | No |
+| [WK8209](#wk8209-no-host-ipc) | Pods should not use HostIPC | Warning | No |
 | [WK8301](#wk8301-missing-health-probes) | Containers should have health probes | Warning | No |
+| [WK8302](#wk8302-replicas-minimum) | Deployments should have 2+ replicas | Info | No |
+| [WK8303](#wk8303-poddisruptionbudget) | HA deployments should have a PDB | Info | No |
+| [WK8304](#wk8304-anti-affinity-recommended) | HA deployments should use pod anti-affinity | Info | No |
 
 ---
 
