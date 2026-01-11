@@ -33,6 +33,8 @@ func newApp() *cli.App {
 			graphCommand(),
 			diffCommand(),
 			watchCommand(),
+			testCommand(),
+			designCommand(),
 		},
 	}
 }
