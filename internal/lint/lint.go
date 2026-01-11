@@ -68,8 +68,9 @@ func (l *Linter) LintFile(filePath string) ([]Issue, error) {
 		issues := rule.Check(file, fset)
 
 		// Filter by minimum severity
+		// Note: Lower severity values are more severe (Error=0, Warning=1, Info=2)
 		for _, issue := range issues {
-			if issue.Severity >= l.config.MinSeverity {
+			if issue.Severity <= l.config.MinSeverity {
 				allIssues = append(allIssues, issue)
 			}
 		}
