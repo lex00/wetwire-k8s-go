@@ -14,7 +14,7 @@ func TestNewLinter(t *testing.T) {
 		assert.NotNil(t, linter)
 		assert.NotNil(t, linter.config)
 		assert.Equal(t, SeverityInfo, linter.config.MinSeverity)
-		assert.Len(t, linter.rules, 13, "Should have all 13 rules enabled")
+		assert.Len(t, linter.rules, 25, "Should have all 25 rules enabled")
 	})
 
 	t.Run("should create linter with custom config", func(t *testing.T) {
@@ -31,7 +31,7 @@ func TestNewLinter(t *testing.T) {
 			DisabledRules: []string{"WK8001", "WK8002"},
 		}
 		linter := NewLinter(config)
-		assert.Len(t, linter.rules, 11, "Should have 11 rules enabled (2 disabled)")
+		assert.Len(t, linter.rules, 23, "Should have 23 rules enabled (2 disabled)")
 	})
 }
 
@@ -229,8 +229,8 @@ func TestIsRuleDisabled(t *testing.T) {
 	}
 	linter := NewLinter(config)
 
-	// The linter should have 4 rules (13 - 2 disabled)
-	assert.Len(t, linter.rules, 11)
+	// The linter should have 23 rules (25 - 2 disabled)
+	assert.Len(t, linter.rules, 23)
 }
 
 func TestLintResult_CountsIssuesBySeverity(t *testing.T) {
@@ -314,13 +314,19 @@ func TestConfig_DefaultValues(t *testing.T) {
 
 func TestLinter_AllRulesEnabled(t *testing.T) {
 	linter := NewLinter(nil)
-	// Should have all 13 rules enabled by default
-	assert.Len(t, linter.rules, 13)
+	// Should have all 25 rules enabled by default
+	assert.Len(t, linter.rules, 25)
 }
 
 func TestLinter_DisableAllRules(t *testing.T) {
 	config := &Config{
-		DisabledRules: []string{"WK8001", "WK8002", "WK8003", "WK8004", "WK8005", "WK8006", "WK8041", "WK8042", "WK8101", "WK8102", "WK8201", "WK8202", "WK8301"},
+		DisabledRules: []string{
+			"WK8001", "WK8002", "WK8003", "WK8004", "WK8005", "WK8006",
+			"WK8041", "WK8042",
+			"WK8101", "WK8102", "WK8103", "WK8104", "WK8105",
+			"WK8201", "WK8202", "WK8203", "WK8204", "WK8205", "WK8207", "WK8208", "WK8209",
+			"WK8301", "WK8302", "WK8303", "WK8304",
+		},
 	}
 	linter := NewLinter(config)
 	assert.Len(t, linter.rules, 0)
