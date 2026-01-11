@@ -31,6 +31,8 @@ func newApp() *cli.App {
 			listCommand(),
 			initCommand(),
 			graphCommand(),
+			diffCommand(),
+			watchCommand(),
 		},
 	}
 }
