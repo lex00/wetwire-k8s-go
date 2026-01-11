@@ -34,6 +34,7 @@ Thumbs.db
 /dist/
 /wetwire-k8s
 /wetwire-k8s-mcp
+/main
 
 # Local environment files
 .env
