@@ -87,6 +87,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Integration tests with kubernetes/examples patterns
   - Performance benchmarks for parsing and comparison
 
+#### Phase 5: Developer Experience (Issues #10, #13, #17)
+
+- **Diff CLI command** (`cmd/wetwire-k8s/diff.go`)
+  - `wetwire-k8s diff [PATH] --against <manifest>` - Compare generated vs existing
+  - Text diff mode (line-by-line) and semantic diff mode
+  - Flags: `--semantic`, `--color`, `--output`
+  - Uses internal/roundtrip for semantic YAML comparison
+
+- **Watch CLI command** (`cmd/wetwire-k8s/watch.go`)
+  - `wetwire-k8s watch [PATH]` - Monitor source files for changes
+  - Auto-rebuild on change with debouncing via fsnotify
+  - Flags: `--output`, `--interval`
+  - Comprehensive test coverage
+
+- **MCP server for Claude Code integration** (`cmd/wetwire-k8s-mcp/`)
+  - Model Context Protocol server using github.com/mark3labs/mcp-go
+  - Tools: build, lint, import, validate
+  - JSON-RPC 2.0 communication via stdio
+  - Full handler implementations for all tools
+
+- **Recommended documentation** (`docs/`)
+  - `docs/QUICK_START.md` - 5-minute getting started guide
+  - `docs/INTERNALS.md` - Architecture deep-dive (build pipeline)
+  - `docs/TROUBLESHOOTING.md` - Common issues and solutions
+  - `docs/CONTRIBUTING.md` - Development guide
+
+- **Working examples** (`examples/`)
+  - `examples/guestbook/` - Multi-tier web app with Redis backend
+  - `examples/web-service/` - Deployment + Service + Ingress with production features
+  - `examples/configmap-secret/` - ConfigMap and Secret usage patterns
+  - All examples compile, follow wetwire pattern, include README
+
 #### Phase 3: CLI Commands (Issues #5, #7, #14)
 
 - **Build CLI command** (`cmd/wetwire-k8s/build.go`)
@@ -122,3 +154,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CI workflow now conditionally runs round-trip tests based on directory existence
 - CI workflow excludes cmd packages from test coverage
+- CI workflow excludes examples from test coverage
