@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/lex00/wetwire-core-go v1.4.0
+	github.com/lex00/wetwire-core-go v1.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	gopkg.in/yaml.v3 v3.0.1
