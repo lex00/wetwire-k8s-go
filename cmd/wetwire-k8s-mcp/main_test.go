@@ -5,36 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// makeRequest creates a CallToolRequest with the given arguments.
-func makeRequest(args map[string]interface{}) mcp.CallToolRequest {
-	return mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Arguments: args,
-		},
-	}
-}
-
-func TestBuildHandler(t *testing.T) {
+func TestBuildToolHandler(t *testing.T) {
 	t.Run("returns error for non-existent path", func(t *testing.T) {
-		req := makeRequest(map[string]interface{}{
-			"path": "/non/existent/path",
-		})
+		args := map[string]any{
+			"package": "/non/existent/path",
+		}
 
-		result, err := buildHandler(context.Background(), req)
+		result, err := buildToolHandler(context.Background(), args)
 
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.True(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "path does not exist")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path does not exist")
+		assert.Empty(t, result)
 	})
 
 	t.Run("returns no resources for empty directory", func(t *testing.T) {
@@ -43,42 +33,38 @@ func TestBuildHandler(t *testing.T) {
 		require.NoError(t, err)
 		defer os.RemoveAll(tmpDir)
 
-		req := makeRequest(map[string]interface{}{
-			"path": tmpDir,
-		})
+		args := map[string]any{
+			"package": tmpDir,
+		}
 
-		result, err := buildHandler(context.Background(), req)
+		result, err := buildToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "No Kubernetes resources found")
+		assert.Contains(t, result, "No Kubernetes resources found")
 	})
 
 	t.Run("uses default path when not specified", func(t *testing.T) {
-		req := makeRequest(map[string]interface{}{})
+		args := map[string]any{}
 
-		result, err := buildHandler(context.Background(), req)
+		result, err := buildToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
 		// Should not error about missing path
-		assert.False(t, strings.Contains(getTextContent(result), "path does not exist"))
+		assert.NotContains(t, result, "path does not exist")
 	})
 }
 
-func TestLintHandler(t *testing.T) {
+func TestLintToolHandler(t *testing.T) {
 	t.Run("returns error for non-existent path", func(t *testing.T) {
-		req := makeRequest(map[string]interface{}{
-			"path": "/non/existent/path",
-		})
+		args := map[string]any{
+			"package": "/non/existent/path",
+		}
 
-		result, err := lintHandler(context.Background(), req)
+		result, err := lintToolHandler(context.Background(), args)
 
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.True(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "path does not exist")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path does not exist")
+		assert.Empty(t, result)
 	})
 
 	t.Run("lints empty directory successfully", func(t *testing.T) {
@@ -86,16 +72,14 @@ func TestLintHandler(t *testing.T) {
 		require.NoError(t, err)
 		defer os.RemoveAll(tmpDir)
 
-		req := makeRequest(map[string]interface{}{
-			"path": tmpDir,
-		})
+		args := map[string]any{
+			"package": tmpDir,
+		}
 
-		result, err := lintHandler(context.Background(), req)
+		result, err := lintToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "No issues found")
+		assert.Contains(t, result, "No issues found")
 	})
 
 	t.Run("returns JSON format when requested", func(t *testing.T) {
@@ -103,20 +87,18 @@ func TestLintHandler(t *testing.T) {
 		require.NoError(t, err)
 		defer os.RemoveAll(tmpDir)
 
-		req := makeRequest(map[string]interface{}{
-			"path":   tmpDir,
-			"format": "json",
-		})
+		args := map[string]any{
+			"package": tmpDir,
+			"format":  "json",
+		}
 
-		result, err := lintHandler(context.Background(), req)
+		result, err := lintToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
 
 		// Verify it's valid JSON
 		var jsonResult map[string]interface{}
-		err = json.Unmarshal([]byte(getTextContent(result)), &jsonResult)
+		err = json.Unmarshal([]byte(result), &jsonResult)
 		require.NoError(t, err)
 		assert.Contains(t, jsonResult, "total_files")
 		assert.Contains(t, jsonResult, "issues")
@@ -140,31 +122,29 @@ var MyDeployment = appsv1.Deployment{}
 		err = os.WriteFile(goFile, []byte(content), 0644)
 		require.NoError(t, err)
 
-		req := makeRequest(map[string]interface{}{
-			"path": tmpDir,
-		})
+		args := map[string]any{
+			"package": tmpDir,
+		}
 
-		result, err := lintHandler(context.Background(), req)
+		result, err := lintToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
+		assert.NotEmpty(t, result)
 	})
 }
 
-func TestImportHandler(t *testing.T) {
-	t.Run("returns error when yaml is missing", func(t *testing.T) {
-		req := makeRequest(map[string]interface{}{})
+func TestImportToolHandler(t *testing.T) {
+	t.Run("returns error when files/yaml is missing", func(t *testing.T) {
+		args := map[string]any{}
 
-		result, err := importHandler(context.Background(), req)
+		result, err := importToolHandler(context.Background(), args)
 
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.True(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "yaml parameter is required")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "files parameter is required")
+		assert.Empty(t, result)
 	})
 
-	t.Run("imports simple deployment YAML", func(t *testing.T) {
+	t.Run("imports simple deployment YAML via yaml param", func(t *testing.T) {
 		yamlContent := `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -184,39 +164,41 @@ spec:
       - name: nginx
         image: nginx:latest
 `
-		req := makeRequest(map[string]interface{}{
+		args := map[string]any{
 			"yaml": yamlContent,
-		})
+		}
 
-		result, err := importHandler(context.Background(), req)
+		result, err := importToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
-
-		output := getTextContent(result)
-		assert.Contains(t, output, "package main")
-		assert.Contains(t, output, "Deployment")
-		assert.Contains(t, output, "nginx")
+		assert.Contains(t, result, "package main")
+		assert.Contains(t, result, "Deployment")
+		assert.Contains(t, result, "nginx")
 	})
 
-	t.Run("uses custom package name", func(t *testing.T) {
+	t.Run("imports from file via files param", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "wetwire-import-test-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
 		yamlContent := `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test-config
 `
-		req := makeRequest(map[string]interface{}{
-			"yaml":    yamlContent,
-			"package": "k8s",
-		})
+		yamlFile := filepath.Join(tmpDir, "config.yaml")
+		err = os.WriteFile(yamlFile, []byte(yamlContent), 0644)
+		require.NoError(t, err)
 
-		result, err := importHandler(context.Background(), req)
+		args := map[string]any{
+			"files":   []interface{}{yamlFile},
+			"package": "k8s",
+		}
+
+		result, err := importToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "package k8s")
+		assert.Contains(t, result, "package k8s")
 	})
 
 	t.Run("uses variable prefix", func(t *testing.T) {
@@ -225,48 +207,44 @@ kind: Service
 metadata:
   name: my-service
 `
-		req := makeRequest(map[string]interface{}{
+		args := map[string]any{
 			"yaml":       yamlContent,
 			"var_prefix": "App",
-		})
+		}
 
-		result, err := importHandler(context.Background(), req)
+		result, err := importToolHandler(context.Background(), args)
 
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "App")
+		assert.Contains(t, result, "App")
 	})
 }
 
-func TestValidateHandler(t *testing.T) {
-	t.Run("returns error when both yaml and path are missing", func(t *testing.T) {
-		req := makeRequest(map[string]interface{}{})
+func TestValidateToolHandler(t *testing.T) {
+	t.Run("returns error when path is missing", func(t *testing.T) {
+		args := map[string]any{}
 
-		result, err := validateHandler(context.Background(), req)
+		result, err := validateToolHandler(context.Background(), args)
 
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.True(t, result.IsError)
-		assert.Contains(t, getTextContent(result), "either 'yaml' or 'path' parameter is required")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path parameter is required")
+		assert.Empty(t, result)
 	})
 
 	t.Run("returns error for non-existent path", func(t *testing.T) {
 		// Skip if kubeconform is not installed
-		if _, err := os.Stat("/usr/local/bin/kubeconform"); os.IsNotExist(err) {
+		if _, lookupErr := exec.LookPath("kubeconform"); lookupErr != nil {
 			t.Skip("kubeconform not installed")
 		}
 
-		req := makeRequest(map[string]interface{}{
+		args := map[string]any{
 			"path": "/non/existent/path.yaml",
-		})
+		}
 
-		result, err := validateHandler(context.Background(), req)
+		result, err := validateToolHandler(context.Background(), args)
 
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		// Either kubeconform not installed or path doesn't exist
-		assert.True(t, result.IsError || strings.Contains(getTextContent(result), "not exist"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path does not exist")
+		assert.Empty(t, result)
 	})
 }
 
@@ -392,20 +370,4 @@ func formatLintGitHubFromResult(result *lintResult) string {
 	}
 
 	return output.String()
-}
-
-// getTextContent extracts text content from a CallToolResult.
-func getTextContent(result *mcp.CallToolResult) string {
-	if result == nil || len(result.Content) == 0 {
-		return ""
-	}
-
-	// Try to extract text content from the result
-	for _, content := range result.Content {
-		if textContent, ok := mcp.AsTextContent(content); ok {
-			return textContent.Text
-		}
-	}
-
-	return ""
 }
