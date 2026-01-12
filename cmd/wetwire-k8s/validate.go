@@ -11,16 +11,21 @@ import (
 
 	"github.com/lex00/wetwire-k8s-go/internal/build"
 	"github.com/lex00/wetwire-k8s-go/internal/discover"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-// validateCommand creates the validate subcommand
-func validateCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "validate",
-		Usage:     "Validate Kubernetes manifests using kubeconform",
-		ArgsUsage: "<file|directory|->...",
-		Description: `Validate parses Kubernetes YAML manifests and validates them
+// newValidateCmd creates the validate subcommand
+func newValidateCmd() *cobra.Command {
+	var schemaLocation string
+	var strict bool
+	var output string
+	var fromBuild bool
+	var kubernetesVersion string
+
+	cmd := &cobra.Command{
+		Use:   "validate <file|directory|->...",
+		Short: "Validate Kubernetes manifests using kubeconform",
+		Long: `Validate parses Kubernetes YAML manifests and validates them
 against the Kubernetes OpenAPI specification using kubeconform.
 
 Use '-' as the file path to read from stdin.
@@ -33,112 +38,87 @@ Examples:
   wetwire-k8s validate --strict deployment.yaml # Strict validation
   wetwire-k8s validate --output json file.yaml  # JSON output format
   wetwire-k8s validate --from-build ./k8s       # Validate build output from Go source`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "schema-location",
-				Aliases: []string{"s"},
-				Usage:   "Override schema location (use 'default' for default schemas)",
-				Value:   "",
-			},
-			&cli.BoolFlag{
-				Name:  "strict",
-				Usage: "Enable strict validation (reject unknown fields)",
-				Value: false,
-			},
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "Output format: text, json, or tap",
-				Value:   "text",
-			},
-			&cli.BoolFlag{
-				Name:  "from-build",
-				Usage: "Validate generated output from Go source (run build first)",
-				Value: false,
-			},
-			&cli.StringFlag{
-				Name:  "kubernetes-version",
-				Usage: "Kubernetes version to validate against (e.g., 1.29.0)",
-				Value: "",
-			},
-		},
-		Action: runValidate,
-	}
-}
-
-// runValidate executes the validate command
-func runValidate(c *cli.Context) error {
-	fromBuild := c.Bool("from-build")
-
-	// Check for input files (unless using --from-build which can use current dir)
-	if c.NArg() < 1 && !fromBuild {
-		return fmt.Errorf("missing input file, directory, or use '-' for stdin")
-	}
-
-	// Check for kubeconform installation
-	kubeconformPath, err := exec.LookPath("kubeconform")
-	if err != nil {
-		return fmt.Errorf("kubeconform is not installed or not in PATH. Install it from https://github.com/yannh/kubeconform")
-	}
-
-	// Handle --from-build mode
-	if fromBuild {
-		return runValidateFromBuild(c, kubeconformPath)
-	}
-
-	// Collect all files to validate
-	var filesToValidate []string
-	var stdinData []byte
-
-	for _, arg := range c.Args().Slice() {
-		if arg == "-" {
-			// Read from stdin
-			data, err := io.ReadAll(os.Stdin)
-			if err != nil {
-				return fmt.Errorf("failed to read stdin: %w", err)
-			}
-			stdinData = data
-		} else {
-			// Check if path exists
-			info, err := os.Stat(arg)
-			if err != nil {
-				return fmt.Errorf("cannot access %s: %w", arg, err)
+		Args: cobra.MinimumNArgs(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check for input files (unless using --from-build which can use current dir)
+			if len(args) < 1 && !fromBuild {
+				return fmt.Errorf("missing input file, directory, or use '-' for stdin")
 			}
 
-			if info.IsDir() {
-				// Collect all YAML files from directory
-				files, err := collectYAMLFiles(arg)
-				if err != nil {
-					return fmt.Errorf("failed to collect files from %s: %w", arg, err)
+			// Check for kubeconform installation
+			kubeconformPath, err := exec.LookPath("kubeconform")
+			if err != nil {
+				return fmt.Errorf("kubeconform is not installed or not in PATH. Install it from https://github.com/yannh/kubeconform")
+			}
+
+			// Handle --from-build mode
+			if fromBuild {
+				return runValidateFromBuildCobra(cmd, args, kubeconformPath, schemaLocation, strict, output, kubernetesVersion)
+			}
+
+			// Collect all files to validate
+			var filesToValidate []string
+			var stdinData []byte
+
+			for _, arg := range args {
+				if arg == "-" {
+					// Read from stdin
+					data, err := io.ReadAll(os.Stdin)
+					if err != nil {
+						return fmt.Errorf("failed to read stdin: %w", err)
+					}
+					stdinData = data
+				} else {
+					// Check if path exists
+					info, err := os.Stat(arg)
+					if err != nil {
+						return fmt.Errorf("cannot access %s: %w", arg, err)
+					}
+
+					if info.IsDir() {
+						// Collect all YAML files from directory
+						files, err := collectYAMLFiles(arg)
+						if err != nil {
+							return fmt.Errorf("failed to collect files from %s: %w", arg, err)
+						}
+						filesToValidate = append(filesToValidate, files...)
+					} else {
+						filesToValidate = append(filesToValidate, arg)
+					}
 				}
-				filesToValidate = append(filesToValidate, files...)
-			} else {
-				filesToValidate = append(filesToValidate, arg)
 			}
-		}
+
+			// Build kubeconform arguments
+			kubeArgs := buildKubeconformArgsCobra(schemaLocation, strict, output, kubernetesVersion)
+
+			// Run validation
+			if stdinData != nil {
+				return runKubeconformWithStdinCobra(cmd, kubeconformPath, kubeArgs, stdinData)
+			}
+
+			if len(filesToValidate) == 0 {
+				return fmt.Errorf("no YAML files found to validate")
+			}
+
+			return runKubeconformWithFilesCobra(cmd, kubeconformPath, kubeArgs, filesToValidate)
+		},
 	}
 
-	// Build kubeconform arguments
-	args := buildKubeconformArgs(c)
+	cmd.Flags().StringVarP(&schemaLocation, "schema-location", "s", "", "Override schema location (use 'default' for default schemas)")
+	cmd.Flags().BoolVar(&strict, "strict", false, "Enable strict validation (reject unknown fields)")
+	cmd.Flags().StringVarP(&output, "output", "o", "text", "Output format: text, json, or tap")
+	cmd.Flags().BoolVar(&fromBuild, "from-build", false, "Validate generated output from Go source (run build first)")
+	cmd.Flags().StringVar(&kubernetesVersion, "kubernetes-version", "", "Kubernetes version to validate against (e.g., 1.29.0)")
 
-	// Run validation
-	if stdinData != nil {
-		return runKubeconformWithStdin(c, kubeconformPath, args, stdinData)
-	}
-
-	if len(filesToValidate) == 0 {
-		return fmt.Errorf("no YAML files found to validate")
-	}
-
-	return runKubeconformWithFiles(c, kubeconformPath, args, filesToValidate)
+	return cmd
 }
 
-// runValidateFromBuild runs the build pipeline and validates the output
-func runValidateFromBuild(c *cli.Context, kubeconformPath string) error {
+// runValidateFromBuildCobra runs the build pipeline and validates the output
+func runValidateFromBuildCobra(cmd *cobra.Command, args []string, kubeconformPath, schemaLocation string, strict bool, output, kubernetesVersion string) error {
 	// Determine source path
-	sourcePath := c.Args().First()
-	if sourcePath == "" {
-		sourcePath = "."
+	sourcePath := "."
+	if len(args) > 0 {
+		sourcePath = args[0]
 	}
 
 	// Resolve to absolute path
@@ -162,10 +142,7 @@ func runValidateFromBuild(c *cli.Context, kubeconformPath string) error {
 
 	// No resources found
 	if len(result.OrderedResources) == 0 {
-		errWriter := c.App.ErrWriter
-		if errWriter == nil {
-			errWriter = os.Stderr
-		}
+		errWriter := cmd.ErrOrStderr()
 		fmt.Fprintln(errWriter, "No resources found to validate")
 		return nil
 	}
@@ -177,10 +154,10 @@ func runValidateFromBuild(c *cli.Context, kubeconformPath string) error {
 	}
 
 	// Build kubeconform arguments
-	args := buildKubeconformArgs(c)
+	kubeArgs := buildKubeconformArgsCobra(schemaLocation, strict, output, kubernetesVersion)
 
 	// Validate the generated YAML
-	return runKubeconformWithStdin(c, kubeconformPath, args, yamlOutput)
+	return runKubeconformWithStdinCobra(cmd, kubeconformPath, kubeArgs, yamlOutput)
 }
 
 // generateBuildOutput creates YAML from discovered resources
@@ -211,31 +188,28 @@ func collectYAMLFiles(dir string) ([]string, error) {
 	return files, err
 }
 
-// buildKubeconformArgs builds the arguments for kubeconform
-func buildKubeconformArgs(c *cli.Context) []string {
+// buildKubeconformArgsCobra builds the arguments for kubeconform
+func buildKubeconformArgsCobra(schemaLocation string, strict bool, output, kubernetesVersion string) []string {
 	var args []string
 
 	// Output format
-	output := c.String("output")
 	if output != "" && output != "text" {
 		args = append(args, "-output", output)
 	}
 
 	// Strict mode
-	if c.Bool("strict") {
+	if strict {
 		args = append(args, "-strict")
 	}
 
 	// Schema location
-	schemaLocation := c.String("schema-location")
 	if schemaLocation != "" && schemaLocation != "default" {
 		args = append(args, "-schema-location", schemaLocation)
 	}
 
 	// Kubernetes version
-	k8sVersion := c.String("kubernetes-version")
-	if k8sVersion != "" {
-		args = append(args, "-kubernetes-version", k8sVersion)
+	if kubernetesVersion != "" {
+		args = append(args, "-kubernetes-version", kubernetesVersion)
 	}
 
 	// Summary output for better feedback
@@ -244,35 +218,29 @@ func buildKubeconformArgs(c *cli.Context) []string {
 	return args
 }
 
-// runKubeconformWithStdin runs kubeconform with stdin input
-func runKubeconformWithStdin(c *cli.Context, kubeconformPath string, args []string, data []byte) error {
+// runKubeconformWithStdinCobra runs kubeconform with stdin input
+func runKubeconformWithStdinCobra(cmd *cobra.Command, kubeconformPath string, args []string, data []byte) error {
 	// Add stdin flag
 	args = append(args, "-")
 
-	cmd := exec.Command(kubeconformPath, args...)
-	cmd.Stdin = bytes.NewReader(data)
+	execCmd := exec.Command(kubeconformPath, args...)
+	execCmd.Stdin = bytes.NewReader(data)
 
 	// Capture output
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	execCmd.Stdout = &stdout
+	execCmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err := execCmd.Run()
 
 	// Write output to app writer
-	writer := c.App.Writer
-	if writer == nil {
-		writer = os.Stdout
-	}
+	writer := cmd.OutOrStdout()
 
 	if stdout.Len() > 0 {
 		writer.Write(stdout.Bytes())
 	}
 
-	errWriter := c.App.ErrWriter
-	if errWriter == nil {
-		errWriter = os.Stderr
-	}
+	errWriter := cmd.ErrOrStderr()
 
 	if stderr.Len() > 0 {
 		errWriter.Write(stderr.Bytes())
@@ -288,34 +256,28 @@ func runKubeconformWithStdin(c *cli.Context, kubeconformPath string, args []stri
 	return nil
 }
 
-// runKubeconformWithFiles runs kubeconform with file arguments
-func runKubeconformWithFiles(c *cli.Context, kubeconformPath string, args []string, files []string) error {
+// runKubeconformWithFilesCobra runs kubeconform with file arguments
+func runKubeconformWithFilesCobra(cmd *cobra.Command, kubeconformPath string, args []string, files []string) error {
 	// Append files to arguments
 	args = append(args, files...)
 
-	cmd := exec.Command(kubeconformPath, args...)
+	execCmd := exec.Command(kubeconformPath, args...)
 
 	// Capture output
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	execCmd.Stdout = &stdout
+	execCmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err := execCmd.Run()
 
 	// Write output to app writer
-	writer := c.App.Writer
-	if writer == nil {
-		writer = os.Stdout
-	}
+	writer := cmd.OutOrStdout()
 
 	if stdout.Len() > 0 {
 		writer.Write(stdout.Bytes())
 	}
 
-	errWriter := c.App.ErrWriter
-	if errWriter == nil {
-		errWriter = os.Stderr
-	}
+	errWriter := cmd.ErrOrStderr()
 
 	if stderr.Len() > 0 {
 		errWriter.Write(stderr.Bytes())

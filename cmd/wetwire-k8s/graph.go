@@ -9,16 +9,18 @@ import (
 	"strings"
 
 	"github.com/lex00/wetwire-k8s-go/internal/discover"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-// graphCommand creates the graph subcommand
-func graphCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "graph",
-		Usage:     "Show resource dependency graph",
-		ArgsUsage: "[PATH]",
-		Description: `Graph displays the dependency relationships between Kubernetes resources.
+// newGraphCmd creates the graph subcommand
+func newGraphCmd() *cobra.Command {
+	var format string
+	var output string
+
+	cmd := &cobra.Command{
+		Use:   "graph [PATH]",
+		Short: "Show resource dependency graph",
+		Long: `Graph displays the dependency relationships between Kubernetes resources.
 
 If PATH is not specified, the current directory is used.
 
@@ -31,88 +33,76 @@ Examples:
   wetwire-k8s graph ./k8s                # Show graph from specific directory
   wetwire-k8s graph -f dot               # Output as DOT format
   wetwire-k8s graph -f dot -o graph.dot  # Save DOT output to file`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "format",
-				Aliases: []string{"f"},
-				Usage:   "Output format: ascii or dot",
-				Value:   "ascii",
-			},
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "Output file path (default: stdout)",
-				Value:   "",
-			},
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validate format early
+			format = strings.ToLower(format)
+			if format != "ascii" && format != "dot" {
+				return fmt.Errorf("invalid format %q: must be 'ascii' or 'dot'", format)
+			}
+
+			// Determine source path
+			sourcePath := "."
+			if len(args) > 0 {
+				sourcePath = args[0]
+			}
+
+			// Resolve to absolute path
+			absPath, err := filepath.Abs(sourcePath)
+			if err != nil {
+				return fmt.Errorf("failed to resolve path: %w", err)
+			}
+
+			// Validate source path exists
+			if _, err := os.Stat(absPath); err != nil {
+				return fmt.Errorf("source path does not exist: %s", absPath)
+			}
+
+			// Discover resources
+			resources, err := discoverResourcesForGraph(absPath)
+			if err != nil {
+				return fmt.Errorf("discovery failed: %w", err)
+			}
+
+			// Determine output writer
+			var writer io.Writer
+			if output != "" {
+				// Create output directory if needed
+				outputDir := filepath.Dir(output)
+				if err := os.MkdirAll(outputDir, 0755); err != nil {
+					return fmt.Errorf("failed to create output directory: %w", err)
+				}
+
+				file, err := os.Create(output)
+				if err != nil {
+					return fmt.Errorf("failed to create output file: %w", err)
+				}
+				defer file.Close()
+				writer = file
+			} else {
+				writer = cmd.OutOrStdout()
+			}
+
+			// Check if we have resources
+			if len(resources) == 0 {
+				fmt.Fprintln(writer, "No resources found")
+				return nil
+			}
+
+			// Output in requested format
+			switch format {
+			case "dot":
+				return outputDOT(writer, resources)
+			default:
+				return outputASCII(writer, resources)
+			}
 		},
-		Action: runGraph,
-	}
-}
-
-// runGraph executes the graph command
-func runGraph(c *cli.Context) error {
-	// Determine source path
-	sourcePath := c.Args().First()
-	if sourcePath == "" {
-		sourcePath = "."
 	}
 
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve path: %w", err)
-	}
+	cmd.Flags().StringVarP(&format, "format", "f", "ascii", "Output format: ascii or dot")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (default: stdout)")
 
-	// Validate source path exists
-	if _, err := os.Stat(absPath); err != nil {
-		return fmt.Errorf("source path does not exist: %s", absPath)
-	}
-
-	// Discover resources
-	resources, err := discoverResourcesForGraph(absPath)
-	if err != nil {
-		return fmt.Errorf("discovery failed: %w", err)
-	}
-
-	// Determine output writer
-	var writer io.Writer
-	outputPath := c.String("output")
-	if outputPath != "" {
-		// Create output directory if needed
-		outputDir := filepath.Dir(outputPath)
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			return fmt.Errorf("failed to create output directory: %w", err)
-		}
-
-		file, err := os.Create(outputPath)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %w", err)
-		}
-		defer file.Close()
-		writer = file
-	} else {
-		writer = c.App.Writer
-		if writer == nil {
-			writer = os.Stdout
-		}
-	}
-
-	// Check if we have resources
-	if len(resources) == 0 {
-		fmt.Fprintln(writer, "No resources found")
-		return nil
-	}
-
-	// Output in requested format
-	format := strings.ToLower(c.String("format"))
-	switch format {
-	case "dot":
-		return outputDOT(writer, resources)
-	case "ascii":
-		return outputASCII(writer, resources)
-	default:
-		return fmt.Errorf("invalid format %q: must be 'ascii' or 'dot'", format)
-	}
+	return cmd
 }
 
 // discoverResourcesForGraph discovers resources from the given path

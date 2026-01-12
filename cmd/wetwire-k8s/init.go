@@ -5,16 +5,17 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-// initCommand creates the init subcommand
-func initCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "init",
-		Usage:     "Initialize a new wetwire-k8s project",
-		ArgsUsage: "[DIR]",
-		Description: `Init creates a new wetwire-k8s project structure with:
+// newInitCmd creates the init subcommand
+func newInitCmd() *cobra.Command {
+	var example bool
+
+	cmd := &cobra.Command{
+		Use:   "init [DIR]",
+		Short: "Initialize a new wetwire-k8s project",
+		Long: `Init creates a new wetwire-k8s project structure with:
 - k8s/ directory for Kubernetes resource definitions
 - Sample namespace.go file
 - .wetwire.yaml configuration file
@@ -25,84 +26,75 @@ Examples:
   wetwire-k8s init                    # Initialize in current directory
   wetwire-k8s init ./myproject        # Initialize in specific directory
   wetwire-k8s init --example ./app    # Include example resources`,
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "example",
-				Aliases: []string{"e"},
-				Usage:   "Include example resources (deployment, service)",
-				Value:   false,
-			},
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Determine target directory
+			targetDir := "."
+			if len(args) > 0 {
+				targetDir = args[0]
+			}
+
+			// Resolve to absolute path
+			absDir, err := filepath.Abs(targetDir)
+			if err != nil {
+				return fmt.Errorf("failed to resolve path: %w", err)
+			}
+
+			// Create target directory if it doesn't exist
+			if err := os.MkdirAll(absDir, 0755); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+
+			// Create k8s directory
+			k8sDir := filepath.Join(absDir, "k8s")
+			if err := os.MkdirAll(k8sDir, 0755); err != nil {
+				return fmt.Errorf("failed to create k8s directory: %w", err)
+			}
+
+			// Get output writer
+			writer := cmd.OutOrStdout()
+
+			// Create namespace.go (always)
+			nsFile := filepath.Join(k8sDir, "namespace.go")
+			if err := writeFileIfNotExists(nsFile, namespaceTemplate); err != nil {
+				return fmt.Errorf("failed to create namespace.go: %w", err)
+			}
+			fmt.Fprintf(writer, "Created %s\n", nsFile)
+
+			// Create example files if requested
+			if example {
+				// Create deployment.go
+				deployFile := filepath.Join(k8sDir, "deployment.go")
+				if err := writeFileIfNotExists(deployFile, deploymentTemplate); err != nil {
+					return fmt.Errorf("failed to create deployment.go: %w", err)
+				}
+				fmt.Fprintf(writer, "Created %s\n", deployFile)
+
+				// Create service.go
+				svcFile := filepath.Join(k8sDir, "service.go")
+				if err := writeFileIfNotExists(svcFile, serviceTemplate); err != nil {
+					return fmt.Errorf("failed to create service.go: %w", err)
+				}
+				fmt.Fprintf(writer, "Created %s\n", svcFile)
+			}
+
+			// Create .wetwire.yaml
+			configFile := filepath.Join(absDir, ".wetwire.yaml")
+			if err := writeFileIfNotExists(configFile, configTemplate); err != nil {
+				return fmt.Errorf("failed to create .wetwire.yaml: %w", err)
+			}
+			fmt.Fprintf(writer, "Created %s\n", configFile)
+
+			fmt.Fprintf(writer, "\nInitialized wetwire-k8s project in %s\n", absDir)
+			fmt.Fprintf(writer, "Run 'wetwire-k8s build' to generate Kubernetes manifests\n")
+
+			return nil
 		},
-		Action: runInit,
-	}
-}
-
-// runInit executes the init command
-func runInit(c *cli.Context) error {
-	// Determine target directory
-	targetDir := c.Args().First()
-	if targetDir == "" {
-		targetDir = "."
 	}
 
-	// Resolve to absolute path
-	absDir, err := filepath.Abs(targetDir)
-	if err != nil {
-		return fmt.Errorf("failed to resolve path: %w", err)
-	}
+	cmd.Flags().BoolVarP(&example, "example", "e", false, "Include example resources (deployment, service)")
 
-	// Create target directory if it doesn't exist
-	if err := os.MkdirAll(absDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	// Create k8s directory
-	k8sDir := filepath.Join(absDir, "k8s")
-	if err := os.MkdirAll(k8sDir, 0755); err != nil {
-		return fmt.Errorf("failed to create k8s directory: %w", err)
-	}
-
-	// Get output writer
-	writer := c.App.Writer
-	if writer == nil {
-		writer = os.Stdout
-	}
-
-	// Create namespace.go (always)
-	nsFile := filepath.Join(k8sDir, "namespace.go")
-	if err := writeFileIfNotExists(nsFile, namespaceTemplate); err != nil {
-		return fmt.Errorf("failed to create namespace.go: %w", err)
-	}
-	fmt.Fprintf(writer, "Created %s\n", nsFile)
-
-	// Create example files if requested
-	if c.Bool("example") {
-		// Create deployment.go
-		deployFile := filepath.Join(k8sDir, "deployment.go")
-		if err := writeFileIfNotExists(deployFile, deploymentTemplate); err != nil {
-			return fmt.Errorf("failed to create deployment.go: %w", err)
-		}
-		fmt.Fprintf(writer, "Created %s\n", deployFile)
-
-		// Create service.go
-		svcFile := filepath.Join(k8sDir, "service.go")
-		if err := writeFileIfNotExists(svcFile, serviceTemplate); err != nil {
-			return fmt.Errorf("failed to create service.go: %w", err)
-		}
-		fmt.Fprintf(writer, "Created %s\n", svcFile)
-	}
-
-	// Create .wetwire.yaml
-	configFile := filepath.Join(absDir, ".wetwire.yaml")
-	if err := writeFileIfNotExists(configFile, configTemplate); err != nil {
-		return fmt.Errorf("failed to create .wetwire.yaml: %w", err)
-	}
-	fmt.Fprintf(writer, "Created %s\n", configFile)
-
-	fmt.Fprintf(writer, "\nInitialized wetwire-k8s project in %s\n", absDir)
-	fmt.Fprintf(writer, "Run 'wetwire-k8s build' to generate Kubernetes manifests\n")
-
-	return nil
+	return cmd
 }
 
 // writeFileIfNotExists writes content to a file only if it doesn't exist

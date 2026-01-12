@@ -12,15 +12,23 @@ import (
 	"github.com/lex00/wetwire-core-go/agent/orchestrator"
 	"github.com/lex00/wetwire-core-go/agent/personas"
 	"github.com/lex00/wetwire-core-go/agent/results"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-// testCommand creates the test subcommand.
-func testCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "test",
-		Usage: "Run automated persona-based testing",
-		Description: `Run automated testing with AI personas to evaluate code generation quality.
+// newTestCmd creates the test subcommand.
+func newTestCmd() *cobra.Command {
+	var prompt string
+	var persona string
+	var allPersonas bool
+	var outputDir string
+	var scenario string
+	var maxLintCycles int
+	var stream bool
+
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "Run automated persona-based testing",
+		Long: `Run automated testing with AI personas to evaluate code generation quality.
 
 Available personas:
   - beginner: New to Kubernetes, asks many clarifying questions
@@ -32,66 +40,33 @@ Available personas:
 Example:
   wetwire-k8s test --persona beginner --prompt "Create a deployment with 3 replicas"
   wetwire-k8s test --all-personas --prompt "Create an nginx deployment"`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:     "prompt",
-				Usage:    "Natural language description of infrastructure to generate",
-				Required: true,
-			},
-			&cli.StringFlag{
-				Name:    "persona",
-				Aliases: []string{"p"},
-				Usage:   "Persona to use (beginner, intermediate, expert, terse, verbose)",
-				Value:   "intermediate",
-			},
-			&cli.BoolFlag{
-				Name:  "all-personas",
-				Usage: "Run test with all personas",
-			},
-			&cli.StringFlag{
-				Name:    "output-dir",
-				Aliases: []string{"o"},
-				Usage:   "Output directory for generated files",
-				Value:   ".",
-			},
-			&cli.StringFlag{
-				Name:  "scenario",
-				Usage: "Scenario name for tracking",
-				Value: "default",
-			},
-			&cli.IntFlag{
-				Name:  "max-lint-cycles",
-				Usage: "Maximum lint/fix cycles",
-				Value: 3,
-			},
-			&cli.BoolFlag{
-				Name:  "stream",
-				Usage: "Stream AI responses",
-			},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if prompt == "" {
+				return fmt.Errorf("--prompt flag is required")
+			}
+
+			if allPersonas {
+				return runTestAllPersonas(prompt, outputDir, scenario, maxLintCycles, stream)
+			}
+
+			return runTestSinglePersona(prompt, outputDir, persona, scenario, maxLintCycles, stream)
 		},
-		Action: runTest,
-	}
-}
-
-// runTest executes the test command.
-func runTest(c *cli.Context) error {
-	prompt := c.String("prompt")
-	outputDir := c.String("output-dir")
-	personaName := c.String("persona")
-	scenario := c.String("scenario")
-	maxLintCycles := c.Int("max-lint-cycles")
-	stream := c.Bool("stream")
-	allPersonas := c.Bool("all-personas")
-
-	if allPersonas {
-		return runTestAllPersonas(c, prompt, outputDir, scenario, maxLintCycles, stream)
 	}
 
-	return runTestSinglePersona(c, prompt, outputDir, personaName, scenario, maxLintCycles, stream)
+	cmd.Flags().StringVar(&prompt, "prompt", "", "Natural language description of infrastructure to generate")
+	cmd.Flags().StringVarP(&persona, "persona", "p", "intermediate", "Persona to use (beginner, intermediate, expert, terse, verbose)")
+	cmd.Flags().BoolVar(&allPersonas, "all-personas", false, "Run test with all personas")
+	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", ".", "Output directory for generated files")
+	cmd.Flags().StringVar(&scenario, "scenario", "default", "Scenario name for tracking")
+	cmd.Flags().IntVar(&maxLintCycles, "max-lint-cycles", 3, "Maximum lint/fix cycles")
+	cmd.Flags().BoolVar(&stream, "stream", false, "Stream AI responses")
+	_ = cmd.MarkFlagRequired("prompt")
+
+	return cmd
 }
 
 // runTestAllPersonas runs the test with all available personas.
-func runTestAllPersonas(c *cli.Context, prompt, outputDir, scenario string, maxLintCycles int, stream bool) error {
+func runTestAllPersonas(prompt, outputDir, scenario string, maxLintCycles int, stream bool) error {
 	personaNames := personas.Names()
 	var failed []string
 
@@ -103,7 +78,7 @@ func runTestAllPersonas(c *cli.Context, prompt, outputDir, scenario string, maxL
 
 		fmt.Printf("=== Running persona: %s ===\n", personaName)
 
-		err := runTestSinglePersona(c, prompt, personaOutputDir, personaName, scenario, maxLintCycles, stream)
+		err := runTestSinglePersona(prompt, personaOutputDir, personaName, scenario, maxLintCycles, stream)
 		if err != nil {
 			fmt.Printf("Persona %s: FAILED - %v\n\n", personaName, err)
 			failed = append(failed, personaName)
@@ -126,7 +101,7 @@ func runTestAllPersonas(c *cli.Context, prompt, outputDir, scenario string, maxL
 }
 
 // runTestSinglePersona runs a test with a single persona.
-func runTestSinglePersona(c *cli.Context, prompt, outputDir, personaName, scenario string, maxLintCycles int, stream bool) error {
+func runTestSinglePersona(prompt, outputDir, personaName, scenario string, maxLintCycles int, stream bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -12,16 +12,18 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/lex00/wetwire-k8s-go/internal/build"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-// watchCommand creates the watch subcommand
-func watchCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "watch",
-		Usage:     "Monitor source files and auto-rebuild on changes",
-		ArgsUsage: "[PATH]",
-		Description: `Watch monitors Go source files for changes and automatically
+// newWatchCmd creates the watch subcommand
+func newWatchCmd() *cobra.Command {
+	var output string
+	var interval time.Duration
+
+	cmd := &cobra.Command{
+		Use:   "watch [PATH]",
+		Short: "Monitor source files and auto-rebuild on changes",
+		Long: `Watch monitors Go source files for changes and automatically
 rebuilds Kubernetes manifests when changes are detected.
 
 If PATH is not specified, the current directory is used.
@@ -34,53 +36,37 @@ Examples:
   wetwire-k8s watch ./k8s                    # Watch specific directory
   wetwire-k8s watch -o manifests.yaml ./k8s  # Output to specific file
   wetwire-k8s watch --interval 500ms ./k8s   # Custom debounce interval`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "Output file path (use '-' for stdout)",
-				Value:   "-",
-			},
-			&cli.DurationFlag{
-				Name:  "interval",
-				Usage: "Debounce interval for file changes",
-				Value: 300 * time.Millisecond,
-			},
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Determine source path
+			sourcePath := "."
+			if len(args) > 0 {
+				sourcePath = args[0]
+			}
+
+			// Resolve to absolute path
+			absPath, err := filepath.Abs(sourcePath)
+			if err != nil {
+				return fmt.Errorf("failed to resolve path: %w", err)
+			}
+
+			// Validate source path exists
+			if _, err := os.Stat(absPath); err != nil {
+				return fmt.Errorf("source path does not exist: %s", absPath)
+			}
+
+			// Get output writer
+			writer := cmd.OutOrStdout()
+
+			// Run watch loop (blocks until interrupted)
+			return runWatchLoop(absPath, output, interval, writer)
 		},
-		Action: runWatch,
-	}
-}
-
-// runWatch executes the watch command
-func runWatch(c *cli.Context) error {
-	// Determine source path
-	sourcePath := c.Args().First()
-	if sourcePath == "" {
-		sourcePath = "."
 	}
 
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve path: %w", err)
-	}
+	cmd.Flags().StringVarP(&output, "output", "o", "-", "Output file path (use '-' for stdout)")
+	cmd.Flags().DurationVar(&interval, "interval", 300*time.Millisecond, "Debounce interval for file changes")
 
-	// Validate source path exists
-	if _, err := os.Stat(absPath); err != nil {
-		return fmt.Errorf("source path does not exist: %s", absPath)
-	}
-
-	outputPath := c.String("output")
-	interval := c.Duration("interval")
-
-	// Get output writer
-	writer := c.App.Writer
-	if writer == nil {
-		writer = os.Stdout
-	}
-
-	// Run watch loop (blocks until interrupted)
-	return runWatchLoop(absPath, outputPath, interval, writer)
+	return cmd
 }
 
 // runWatchLoop runs the main watch loop
