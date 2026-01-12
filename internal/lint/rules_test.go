@@ -201,8 +201,8 @@ func TestWK8006_FlagLatestImageTags(t *testing.T) {
 func TestAllRules(t *testing.T) {
 	rules := AllRules()
 
-	t.Run("should have all 25 rules", func(t *testing.T) {
-		assert.Len(t, rules, 25, "Expected 25 rules")
+	t.Run("should have all 26 rules", func(t *testing.T) {
+		assert.Len(t, rules, 26, "Expected 26 rules")
 	})
 
 	t.Run("all rules should have required fields", func(t *testing.T) {
@@ -547,6 +547,33 @@ func TestWK8304_AntiAffinityRecommended(t *testing.T) {
 
 	t.Run("should pass for HA deployments with anti-affinity", func(t *testing.T) {
 		fset, file := parseTestFile(t, "testdata/wk8304_good.go")
+		issues := rule.Check(file, fset)
+
+		assert.Empty(t, issues, "Expected no issues in good file")
+	})
+}
+
+func TestWK8401_FileSizeLimits(t *testing.T) {
+	rule := RuleWK8401()
+
+	t.Run("should detect file with too many resources", func(t *testing.T) {
+		fset, file := parseTestFile(t, "testdata/wk8401_bad.go")
+		issues := rule.Check(file, fset)
+
+		assert.NotEmpty(t, issues, "Expected to find issues in bad file")
+
+		found := false
+		for _, issue := range issues {
+			if issue.Rule == "WK8401" {
+				found = true
+				assert.Contains(t, issue.Message, "resources", "Expected message about resource count")
+			}
+		}
+		assert.True(t, found, "Expected to find WK8401 violation")
+	})
+
+	t.Run("should pass for file with few resources", func(t *testing.T) {
+		fset, file := parseTestFile(t, "testdata/wk8401_good.go")
 		issues := rule.Check(file, fset)
 
 		assert.Empty(t, issues, "Expected no issues in good file")

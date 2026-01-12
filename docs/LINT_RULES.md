@@ -6,7 +6,7 @@ This document describes all lint rules for wetwire-k8s-go.
 
 The wetwire-k8s linter enforces flat, declarative patterns optimized for AI generation and human readability. Rules check for structural patterns, Kubernetes best practices, and security issues.
 
-**Currently implemented: 25 rules** (14 structural/naming + 11 security/availability best practices)
+**Currently implemented: 26 rules** (15 structural/naming + 11 security/availability best practices)
 
 ## Rule naming convention
 
@@ -45,6 +45,7 @@ All rules follow the format: `WK8xxx`
 | [WK8302](#wk8302-replicas-minimum) | Deployments should have 2+ replicas | Info | No |
 | [WK8303](#wk8303-poddisruptionbudget) | HA deployments should have a PDB | Info | No |
 | [WK8304](#wk8304-anti-affinity-recommended) | HA deployments should use pod anti-affinity | Info | No |
+| [WK8401](#wk8401-file-size-limits) | Files should not exceed 20 resources | Warning | No |
 
 ---
 
@@ -1466,6 +1467,45 @@ var MyDeployment = appsv1.Deployment{
     },
 }
 ```
+
+---
+
+### WK8401: File size limits
+
+**Description:** Files SHOULD NOT exceed 20 Kubernetes resources. Large files are harder to navigate and review. Consider splitting resources by concern (networking, compute, storage, etc.).
+
+**Severity:** Warning
+
+**Auto-fix:** No
+
+**Why:** Modular code organization improves readability and maintainability. Per the wetwire spec, files should stay under 500 lines and 20 resources.
+
+**Bad:**
+
+```go
+package k8s
+
+// File with too many resources (>20)
+var Deploy1 = appsv1.Deployment{...}
+var Deploy2 = appsv1.Deployment{...}
+var Deploy3 = appsv1.Deployment{...}
+// ... 20+ more resources ...
+var Deploy21 = appsv1.Deployment{...}
+```
+
+**Good:**
+
+Split into multiple files by concern:
+
+```
+k8s/
+├── frontend.go       # 5 frontend resources
+├── backend.go        # 5 backend resources
+├── database.go       # 5 database resources
+└── networking.go     # 5 networking resources
+```
+
+Each file contains related resources that are easier to understand and maintain.
 
 ---
 
