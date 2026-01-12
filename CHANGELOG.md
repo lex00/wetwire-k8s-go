@@ -250,6 +250,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SOURCES.md with attribution for test fixture patterns
   - New tests: TestComprehensiveYAMLFixtures, TestComprehensiveFixtureCategories, TestComprehensiveFixtureCount
 
+- **File size lint rule** (`internal/lint/rules.go`) (Issue #57)
+  - WK8401: Files should not exceed 20 resources
+  - Encourages modular code organization per wetwire spec Section 9.2
+  - Total lint rules increased from 25 to 26
+
 ### Fixed
 
 - CI workflow now conditionally runs round-trip tests based on directory existence
