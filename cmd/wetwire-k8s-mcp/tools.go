@@ -15,71 +15,86 @@ import (
 	"github.com/lex00/wetwire-k8s-go/internal/importer"
 	"github.com/lex00/wetwire-k8s-go/internal/lint"
 	"github.com/lex00/wetwire-k8s-go/internal/serialize"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// buildHandler handles the build tool call.
-// It generates Kubernetes YAML/JSON manifests from Go source code.
-func buildHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	debugLog("build tool called with args: %v", request.Params.Arguments)
+// Helper functions to parse arguments from the map
+func parseString(args map[string]any, key, defaultVal string) string {
+	if v, ok := args[key].(string); ok {
+		return v
+	}
+	return defaultVal
+}
 
-	// Parse arguments
-	path := mcp.ParseString(request, "path", ".")
-	format := mcp.ParseString(request, "format", "yaml")
+func parseBoolean(args map[string]any, key string, defaultVal bool) bool {
+	if v, ok := args[key].(bool); ok {
+		return v
+	}
+	return defaultVal
+}
+
+// buildToolHandler handles the wetwire_build tool call using core infrastructure.
+// It generates Kubernetes YAML/JSON manifests from Go source code.
+func buildToolHandler(ctx context.Context, args map[string]any) (string, error) {
+	debugLog("wetwire_build tool called with args: %v", args)
+
+	// Parse arguments using core schema conventions
+	pkgPath := parseString(args, "package", ".")
+	format := parseString(args, "format", "yaml")
+	dryRun := parseBoolean(args, "dry_run", true) // Default to dry_run for safety
 
 	// Resolve to absolute path
-	absPath, err := filepath.Abs(path)
+	absPath, err := filepath.Abs(pkgPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to resolve path: %v", err)), nil
+		return "", fmt.Errorf("failed to resolve path: %v", err)
 	}
 
 	// Check if path exists
 	if _, err := os.Stat(absPath); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path does not exist: %s", absPath)), nil
+		return "", fmt.Errorf("path does not exist: %s", absPath)
 	}
 
-	debugLog("building from path: %s, format: %s", absPath, format)
+	debugLog("building from path: %s, format: %s, dry_run: %v", absPath, format, dryRun)
 
 	// Run the build pipeline
 	result, err := build.Build(absPath, build.Options{
 		OutputMode: build.SingleFile,
 	})
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("build failed: %v", err)), nil
+		return "", fmt.Errorf("build failed: %v", err)
 	}
 
 	// No resources found
 	if len(result.OrderedResources) == 0 {
-		return mcp.NewToolResultText("No Kubernetes resources found in the specified path."), nil
+		return "No Kubernetes resources found in the specified path.", nil
 	}
 
 	// Generate output
 	output, err := generateOutput(result.OrderedResources, format)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to generate output: %v", err)), nil
+		return "", fmt.Errorf("failed to generate output: %v", err)
 	}
 
-	return mcp.NewToolResultText(string(output)), nil
+	return string(output), nil
 }
 
-// lintHandler handles the lint tool call.
+// lintToolHandler handles the wetwire_lint tool call using core infrastructure.
 // It lints Go files for wetwire-k8s patterns and best practices.
-func lintHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	debugLog("lint tool called with args: %v", request.Params.Arguments)
+func lintToolHandler(ctx context.Context, args map[string]any) (string, error) {
+	debugLog("wetwire_lint tool called with args: %v", args)
 
-	// Parse arguments
-	path := mcp.ParseString(request, "path", ".")
-	format := mcp.ParseString(request, "format", "text")
+	// Parse arguments using core schema conventions
+	pkgPath := parseString(args, "package", ".")
+	format := parseString(args, "format", "text")
 
 	// Resolve to absolute path
-	absPath, err := filepath.Abs(path)
+	absPath, err := filepath.Abs(pkgPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to resolve path: %v", err)), nil
+		return "", fmt.Errorf("failed to resolve path: %v", err)
 	}
 
 	// Check if path exists
 	if _, err := os.Stat(absPath); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path does not exist: %s", absPath)), nil
+		return "", fmt.Errorf("path does not exist: %s", absPath)
 	}
 
 	debugLog("linting path: %s, format: %s", absPath, format)
@@ -90,7 +105,7 @@ func lintHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 	// Run lint
 	result, err := linter.LintWithResult(absPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("lint failed: %v", err)), nil
+		return "", fmt.Errorf("lint failed: %v", err)
 	}
 
 	// Format output based on requested format
@@ -98,32 +113,47 @@ func lintHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 	switch format {
 	case "json":
 		output, err = formatLintJSON(result)
-	case "github":
-		output = formatLintGitHub(result)
+		if err != nil {
+			return "", fmt.Errorf("failed to format output: %v", err)
+		}
 	default:
 		output = formatLintText(result)
 	}
 
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to format output: %v", err)), nil
-	}
-
-	return mcp.NewToolResultText(output), nil
+	return output, nil
 }
 
-// importHandler handles the import tool call.
+// importToolHandler handles the wetwire_import tool call using core infrastructure.
 // It converts Kubernetes YAML manifests to Go code.
-func importHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	debugLog("import tool called with args: %v", request.Params.Arguments)
+func importToolHandler(ctx context.Context, args map[string]any) (string, error) {
+	debugLog("wetwire_import tool called with args: %v", args)
 
-	// Parse arguments
-	yamlContent := mcp.ParseString(request, "yaml", "")
-	packageName := mcp.ParseString(request, "package", "main")
-	varPrefix := mcp.ParseString(request, "var_prefix", "")
+	// Parse arguments - for import, we accept files array or direct yaml content
+	// The core schema expects files array, but we also support inline yaml
+	var yamlContent string
+	if files, ok := args["files"].([]interface{}); ok && len(files) > 0 {
+		// Read content from first file
+		filePath := fmt.Sprintf("%v", files[0])
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve path: %v", err)
+		}
+		content, err := os.ReadFile(absPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read file: %v", err)
+		}
+		yamlContent = string(content)
+	} else if yaml, ok := args["yaml"].(string); ok {
+		// Backward compatibility: accept yaml parameter directly
+		yamlContent = yaml
+	}
 
 	if yamlContent == "" {
-		return mcp.NewToolResultError("yaml parameter is required"), nil
+		return "", fmt.Errorf("files parameter is required (array of file paths)")
 	}
+
+	packageName := parseString(args, "package", "main")
+	varPrefix := parseString(args, "var_prefix", "")
 
 	debugLog("importing YAML, package: %s, varPrefix: %s", packageName, varPrefix)
 
@@ -136,7 +166,7 @@ func importHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	// Run import
 	result, err := importer.ImportBytes([]byte(yamlContent), opts)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("import failed: %v", err)), nil
+		return "", fmt.Errorf("import failed: %v", err)
 	}
 
 	// Build response with warnings if any
@@ -150,68 +180,46 @@ func importHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	}
 	output.WriteString(result.GoCode)
 
-	return mcp.NewToolResultText(output.String()), nil
+	return output.String(), nil
 }
 
-// validateHandler handles the validate tool call.
+// validateToolHandler handles the wetwire_validate tool call using core infrastructure.
 // It validates Kubernetes manifests using kubeconform.
-func validateHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	debugLog("validate tool called with args: %v", request.Params.Arguments)
+func validateToolHandler(ctx context.Context, args map[string]any) (string, error) {
+	debugLog("wetwire_validate tool called with args: %v", args)
 
-	// Parse arguments
-	yamlContent := mcp.ParseString(request, "yaml", "")
-	path := mcp.ParseString(request, "path", "")
-	strict := mcp.ParseBoolean(request, "strict", false)
-	k8sVersion := mcp.ParseString(request, "kubernetes_version", "")
+	// Parse arguments using core schema conventions
+	path := parseString(args, "path", "")
 
-	// Must have either yaml content or path
-	if yamlContent == "" && path == "" {
-		return mcp.NewToolResultError("either 'yaml' or 'path' parameter is required"), nil
+	if path == "" {
+		return "", fmt.Errorf("path parameter is required")
 	}
 
 	// Check for kubeconform installation
 	kubeconformPath, err := exec.LookPath("kubeconform")
 	if err != nil {
-		return mcp.NewToolResultError("kubeconform is not installed. Install it from https://github.com/yannh/kubeconform"), nil
+		return "", fmt.Errorf("kubeconform is not installed. Install it from https://github.com/yannh/kubeconform")
 	}
 
 	debugLog("using kubeconform at: %s", kubeconformPath)
 
+	// Resolve to absolute path
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %v", err)
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
+		return "", fmt.Errorf("path does not exist: %s", absPath)
+	}
+
 	// Build kubeconform arguments
-	args := []string{"-summary"}
-	if strict {
-		args = append(args, "-strict")
-	}
-	if k8sVersion != "" {
-		args = append(args, "-kubernetes-version", k8sVersion)
-	}
+	cmdArgs := []string{"-summary", absPath}
 
-	var inputData []byte
-	if yamlContent != "" {
-		// Validate from provided YAML content
-		inputData = []byte(yamlContent)
-		args = append(args, "-")
-	} else {
-		// Validate from file/directory
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to resolve path: %v", err)), nil
-		}
-
-		if _, err := os.Stat(absPath); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("path does not exist: %s", absPath)), nil
-		}
-
-		args = append(args, absPath)
-	}
-
-	debugLog("running kubeconform with args: %v", args)
+	debugLog("running kubeconform with args: %v", cmdArgs)
 
 	// Run kubeconform
-	cmd := exec.CommandContext(ctx, kubeconformPath, args...)
-	if inputData != nil {
-		cmd.Stdin = bytes.NewReader(inputData)
-	}
+	cmd := exec.CommandContext(ctx, kubeconformPath, cmdArgs...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -235,7 +243,7 @@ func validateHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			output.WriteString(fmt.Sprintf("\nValidation failed with exit code %d", exitErr.ExitCode()))
 		} else {
-			return mcp.NewToolResultError(fmt.Sprintf("kubeconform execution failed: %v", err)), nil
+			return "", fmt.Errorf("kubeconform execution failed: %v", err)
 		}
 	}
 
@@ -243,7 +251,7 @@ func validateHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		output.WriteString("Validation passed - all resources are valid.")
 	}
 
-	return mcp.NewToolResultText(output.String()), nil
+	return output.String(), nil
 }
 
 // generateOutput creates YAML or JSON from discovered resources.
@@ -421,30 +429,4 @@ func formatLintJSON(result *lint.LintResult) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-// formatLintGitHub formats lint results in GitHub Actions format.
-func formatLintGitHub(result *lint.LintResult) string {
-	if len(result.Issues) == 0 {
-		return ""
-	}
-
-	var output strings.Builder
-	for _, issue := range result.Issues {
-		// GitHub Actions annotation format
-		var level string
-		switch issue.Severity {
-		case lint.SeverityError:
-			level = "error"
-		case lint.SeverityWarning:
-			level = "warning"
-		default:
-			level = "notice"
-		}
-
-		output.WriteString(fmt.Sprintf("::%s file=%s,line=%d,col=%d,title=%s::%s\n",
-			level, issue.File, issue.Line, issue.Column, issue.Rule, issue.Message))
-	}
-
-	return output.String()
 }
