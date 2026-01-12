@@ -36,40 +36,54 @@ wetwire-k8s init --example
 package main
 
 import (
-    appsv1 "github.com/lex00/wetwire-k8s-go/resources/apps/v1"
-    corev1 "github.com/lex00/wetwire-k8s-go/resources/core/v1"
+    appsv1 "k8s.io/api/apps/v1"
+    corev1 "k8s.io/api/core/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var NginxDeployment = appsv1.Deployment{
-    Metadata: corev1.ObjectMeta{
-        Name:      "nginx",
-        Namespace: "default",
-    },
-    Spec: appsv1.DeploymentSpec{
-        Replicas: ptrInt32(3),
-        Selector: &corev1.LabelSelector{
-            MatchLabels: map[string]string{"app": "nginx"},
-        },
-        Template: corev1.PodTemplateSpec{
-            Metadata: corev1.ObjectMeta{
-                Labels: map[string]string{"app": "nginx"},
-            },
-            Spec: corev1.PodSpec{
-                Containers: []corev1.Container{
-                    {
-                        Name:  "nginx",
-                        Image: "nginx:latest",
-                        Ports: []corev1.ContainerPort{
-                            {ContainerPort: 80},
-                        },
-                    },
-                },
-            },
-        },
+// Helper for pointer values
+func ptr[T any](v T) *T { return &v }
+
+// Shared labels for selector and template matching
+var nginxLabels = map[string]string{"app": "nginx"}
+
+// NginxContainer defines the nginx container configuration
+var NginxContainer = corev1.Container{
+    Name:  "nginx",
+    Image: "nginx:1.25-alpine",
+    Ports: []corev1.ContainerPort{
+        {Name: "http", ContainerPort: 80},
     },
 }
 
-func ptrInt32(i int32) *int32 { return &i }
+// NginxPodSpec defines the pod specification
+var NginxPodSpec = corev1.PodSpec{
+    Containers: []corev1.Container{NginxContainer},
+}
+
+// NginxPodTemplate defines the pod template with labels
+var NginxPodTemplate = corev1.PodTemplateSpec{
+    ObjectMeta: metav1.ObjectMeta{
+        Labels: nginxLabels,
+    },
+    Spec: NginxPodSpec,
+}
+
+// NginxDeployment is the main deployment resource
+var NginxDeployment = appsv1.Deployment{
+    ObjectMeta: metav1.ObjectMeta{
+        Name:      "nginx",
+        Namespace: "default",
+        Labels:    nginxLabels,
+    },
+    Spec: appsv1.DeploymentSpec{
+        Replicas: ptr(int32(3)),
+        Selector: &metav1.LabelSelector{
+            MatchLabels: nginxLabels,
+        },
+        Template: NginxPodTemplate,
+    },
+}
 ```
 
 3. Build manifests:
