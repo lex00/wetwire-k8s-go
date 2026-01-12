@@ -554,3 +554,152 @@ metadata:
 		assert.True(t, equivalent)
 	})
 }
+
+// comprehensiveDir returns the path to the comprehensive testdata directory
+func comprehensiveDir() string {
+	return filepath.Join("..", "..", "testdata", "comprehensive")
+}
+
+// TestComprehensiveYAMLFixtures tests all YAML fixtures in the comprehensive directory
+func TestComprehensiveYAMLFixtures(t *testing.T) {
+	baseDir := comprehensiveDir()
+
+	// Skip if comprehensive directory doesn't exist
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		t.Skip("comprehensive testdata directory not found")
+	}
+
+	// Walk through all subdirectories and find YAML files
+	var yamlFiles []string
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && (filepath.Ext(path) == ".yaml" || filepath.Ext(path) == ".yml") {
+			yamlFiles = append(yamlFiles, path)
+		}
+		return nil
+	})
+	require.NoError(t, err, "failed to walk comprehensive directory")
+	require.NotEmpty(t, yamlFiles, "no YAML files found in comprehensive directory")
+
+	for _, file := range yamlFiles {
+		relPath, _ := filepath.Rel(baseDir, file)
+		t.Run(relPath, func(t *testing.T) {
+			data, err := os.ReadFile(file)
+			require.NoError(t, err, "failed to read %s", file)
+
+			// Parse the YAML
+			docs, err := roundtrip.ParseMultiDocYAML(data)
+			require.NoError(t, err, "failed to parse %s", file)
+			require.NotEmpty(t, docs, "no documents found in %s", file)
+
+			// Verify each document has required fields
+			for i, doc := range docs {
+				assert.Contains(t, doc, "apiVersion", "doc %d in %s missing apiVersion", i, relPath)
+				assert.Contains(t, doc, "kind", "doc %d in %s missing kind", i, relPath)
+			}
+
+			// Normalize and compare (round-trip through normalization)
+			normalized, err := roundtrip.NormalizeYAML(data)
+			require.NoError(t, err, "failed to normalize %s", file)
+
+			normalizedDocs, err := roundtrip.ParseMultiDocYAML(normalized)
+			require.NoError(t, err, "failed to parse normalized %s", file)
+
+			equivalent, diffs := roundtrip.Compare(docs, normalizedDocs, true)
+			assert.True(t, equivalent, "normalization round-trip failed for %s: %v", relPath, roundtrip.DiffSummary(diffs))
+		})
+	}
+}
+
+// TestComprehensiveFixtureCategories tests fixtures by category
+func TestComprehensiveFixtureCategories(t *testing.T) {
+	baseDir := comprehensiveDir()
+
+	// Skip if comprehensive directory doesn't exist
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		t.Skip("comprehensive testdata directory not found")
+	}
+
+	categories := []struct {
+		name         string
+		subdir       string
+		minExpected  int
+		expectedKind string // first expected kind in category
+	}{
+		{"pods", "pods", 5, "Pod"},
+		{"workloads", "workloads", 4, "Deployment"},
+		{"services", "services", 4, "Service"},
+		{"config", "config", 2, "ConfigMap"},
+		{"storage", "storage", 2, "PersistentVolume"},
+		{"networking", "networking", 2, "Ingress"},
+		{"batch", "batch", 2, "Job"},
+		{"rbac", "rbac", 4, "Role"},
+		{"autoscaling", "autoscaling", 3, "HorizontalPodAutoscaler"},
+	}
+
+	for _, cat := range categories {
+		t.Run(cat.name, func(t *testing.T) {
+			catDir := filepath.Join(baseDir, cat.subdir)
+			if _, err := os.Stat(catDir); os.IsNotExist(err) {
+				t.Skipf("category directory %s not found", cat.subdir)
+			}
+
+			files, err := filepath.Glob(filepath.Join(catDir, "*.yaml"))
+			require.NoError(t, err)
+			assert.GreaterOrEqual(t, len(files), cat.minExpected,
+				"expected at least %d files in %s, got %d", cat.minExpected, cat.subdir, len(files))
+
+			// Verify at least one file contains the expected kind
+			foundExpectedKind := false
+			for _, file := range files {
+				data, err := os.ReadFile(file)
+				require.NoError(t, err)
+
+				docs, err := roundtrip.ParseMultiDocYAML(data)
+				if err != nil {
+					continue
+				}
+
+				for _, doc := range docs {
+					if doc["kind"] == cat.expectedKind {
+						foundExpectedKind = true
+						break
+					}
+				}
+				if foundExpectedKind {
+					break
+				}
+			}
+			assert.True(t, foundExpectedKind,
+				"expected to find at least one %s in %s", cat.expectedKind, cat.subdir)
+		})
+	}
+}
+
+// TestComprehensiveFixtureCount verifies the total fixture count
+func TestComprehensiveFixtureCount(t *testing.T) {
+	baseDir := comprehensiveDir()
+
+	// Skip if comprehensive directory doesn't exist
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		t.Skip("comprehensive testdata directory not found")
+	}
+
+	var count int
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && (filepath.Ext(path) == ".yaml" || filepath.Ext(path) == ".yml") {
+			count++
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Issue #53 requires at least 25 YAML fixtures
+	assert.GreaterOrEqual(t, count, 25,
+		"expected at least 25 comprehensive fixtures, got %d", count)
+}

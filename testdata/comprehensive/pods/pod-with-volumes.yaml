@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-volumes
+  namespace: default
+spec:
+  containers:
+  - name: app
+    image: nginx:1.21
+    volumeMounts:
+    - name: config-volume
+      mountPath: /etc/config
+    - name: secret-volume
+      mountPath: /etc/secrets
+      readOnly: true
+    - name: data-volume
+      mountPath: /data
+  volumes:
+  - name: config-volume
+    configMap:
+      name: app-config
+  - name: secret-volume
+    secret:
+      secretName: app-secret
+  - name: data-volume
+    emptyDir: {}
