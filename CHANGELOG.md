@@ -243,6 +243,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `PersonaDeveloper` type for AI-driven persona responses in test sessions
   - Comprehensive tests for real provider integration (skip when no API key)
 
+- **Comprehensive test fixtures** (`testdata/comprehensive/`) (Issue #53)
+  - 35 YAML fixtures covering all major Kubernetes resource types
+  - Categories: pods (6), workloads (5), services (5), config (3), storage (3), networking (2), batch (2), rbac (5), autoscaling (4)
+  - Round-trip test coverage for all fixture categories
+  - SOURCES.md with attribution for test fixture patterns
+  - New tests: TestComprehensiveYAMLFixtures, TestComprehensiveFixtureCategories, TestComprehensiveFixtureCount
+
 ### Fixed
 
 - CI workflow now conditionally runs round-trip tests based on directory existence

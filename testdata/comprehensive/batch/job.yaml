@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-migration
+  namespace: default
+spec:
+  ttlSecondsAfterFinished: 100
+  backoffLimit: 4
+  completions: 1
+  parallelism: 1
+  template:
+    spec:
+      containers:
+      - name: migrate
+        image: migrate:latest
+        command: ["./migrate", "--target", "production"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: url
+      restartPolicy: Never
