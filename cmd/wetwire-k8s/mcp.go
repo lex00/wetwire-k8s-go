@@ -1,3 +1,7 @@
+// MCP server implementation for embedded design mode.
+//
+// When mcp subcommand is called, this runs the MCP protocol over stdio,
+// providing wetwire_build, wetwire_lint, wetwire_validate, and wetwire_import tools.
 package main
 
 import (
@@ -10,12 +14,67 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lex00/wetwire-core-go/mcp"
 	"github.com/lex00/wetwire-k8s-go/internal/build"
-	"github.com/lex00/wetwire-k8s-go/internal/discover"
 	"github.com/lex00/wetwire-k8s-go/internal/importer"
 	"github.com/lex00/wetwire-k8s-go/internal/lint"
-	"github.com/lex00/wetwire-k8s-go/internal/serialize"
+	"github.com/spf13/cobra"
 )
+
+// newMCPCmd creates the mcp subcommand.
+func newMCPCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "mcp",
+		Short: "Start MCP server for Claude Code integration",
+		Long: `Start an MCP (Model Context Protocol) server for integration with Claude Code.
+
+This command runs an MCP server over stdio, providing tools for:
+  - wetwire_build: Generate Kubernetes manifests from Go code
+  - wetwire_lint: Lint Go code for wetwire-k8s patterns
+  - wetwire_validate: Validate manifests using kubeconform
+  - wetwire_import: Convert YAML manifests to Go code
+
+This is typically called by Claude Code or other MCP clients, not directly by users.`,
+		RunE: runMCPServer,
+	}
+
+	return cmd
+}
+
+// runMCPServer starts the MCP server on stdio transport.
+func runMCPServer(cmd *cobra.Command, args []string) error {
+	debugLog("Starting wetwire-k8s MCP server version %s", Version)
+
+	// Create MCP server using wetwire-core-go infrastructure
+	server := mcp.NewServer(mcp.Config{
+		Name:    "wetwire-k8s",
+		Version: Version,
+		Debug:   os.Getenv("WETWIRE_MCP_DEBUG") != "",
+	})
+
+	// Register standard wetwire tools using core infrastructure
+	mcp.RegisterStandardTools(server, "k8s", mcp.StandardToolHandlers{
+		Init:     nil, // Not yet implemented
+		Build:    buildToolHandler,
+		Lint:     lintToolHandler,
+		Validate: validateToolHandler,
+		Import:   importToolHandler,
+		List:     nil, // Not yet implemented
+		Graph:    nil, // Not yet implemented
+	})
+
+	debugLog("Registered all tools, starting stdio server")
+
+	// Start stdio server
+	return server.Start(context.Background())
+}
+
+// debugLog logs messages when WETWIRE_MCP_DEBUG is set.
+func debugLog(format string, args ...interface{}) {
+	if os.Getenv("WETWIRE_MCP_DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", args...)
+	}
+}
 
 // Helper functions to parse arguments from the map
 func parseString(args map[string]any, key, defaultVal string) string {
@@ -219,13 +278,13 @@ func validateToolHandler(ctx context.Context, args map[string]any) (string, erro
 	debugLog("running kubeconform with args: %v", cmdArgs)
 
 	// Run kubeconform
-	cmd := exec.CommandContext(ctx, kubeconformPath, cmdArgs...)
+	kubeCmd := exec.CommandContext(ctx, kubeconformPath, cmdArgs...)
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	kubeCmd.Stdout = &stdout
+	kubeCmd.Stderr = &stderr
 
-	err = cmd.Run()
+	err = kubeCmd.Run()
 
 	// Build output
 	var output strings.Builder
@@ -252,117 +311,6 @@ func validateToolHandler(ctx context.Context, args map[string]any) (string, erro
 	}
 
 	return output.String(), nil
-}
-
-// generateOutput creates YAML or JSON from discovered resources.
-func generateOutput(resources []discover.Resource, format string) ([]byte, error) {
-	var manifests []interface{}
-	for _, r := range resources {
-		manifest := createManifestFromResource(r)
-		manifests = append(manifests, manifest)
-	}
-
-	if len(manifests) == 0 {
-		return []byte{}, nil
-	}
-
-	if format == "json" {
-		return serializeResourcesJSON(manifests)
-	}
-	return serializeResourcesYAML(manifests)
-}
-
-// createManifestFromResource creates a basic manifest map from discovered resource.
-func createManifestFromResource(r discover.Resource) map[string]interface{} {
-	apiVersion, kind := parseResourceType(r.Type)
-
-	manifest := map[string]interface{}{
-		"apiVersion": apiVersion,
-		"kind":       kind,
-		"metadata": map[string]interface{}{
-			"name": toKubernetesName(r.Name),
-		},
-	}
-
-	return manifest
-}
-
-// parseResourceType extracts apiVersion and kind from a Go type string.
-func parseResourceType(typeStr string) (string, string) {
-	apiVersion := "v1"
-	kind := "Unknown"
-
-	parts := strings.Split(typeStr, ".")
-	if len(parts) == 2 {
-		pkg := parts[0]
-		kind = parts[1]
-		apiVersion = mapPackageToAPIVersion(pkg)
-	} else if len(parts) == 1 {
-		kind = parts[0]
-	}
-
-	return apiVersion, kind
-}
-
-// mapPackageToAPIVersion maps Go package aliases to Kubernetes API versions.
-func mapPackageToAPIVersion(pkg string) string {
-	packageMap := map[string]string{
-		"corev1":         "v1",
-		"appsv1":         "apps/v1",
-		"batchv1":        "batch/v1",
-		"networkingv1":   "networking.k8s.io/v1",
-		"rbacv1":         "rbac.authorization.k8s.io/v1",
-		"storagev1":      "storage.k8s.io/v1",
-		"policyv1":       "policy/v1",
-		"autoscalingv1":  "autoscaling/v1",
-		"autoscalingv2":  "autoscaling/v2",
-		"admissionv1":    "admissionregistration.k8s.io/v1",
-		"certificatesv1": "certificates.k8s.io/v1",
-	}
-
-	if version, ok := packageMap[pkg]; ok {
-		return version
-	}
-	return "v1"
-}
-
-// toKubernetesName converts a Go variable name to a Kubernetes resource name.
-func toKubernetesName(name string) string {
-	var result strings.Builder
-	for i, r := range name {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteRune('-')
-		}
-		result.WriteRune(r)
-	}
-	return strings.ToLower(result.String())
-}
-
-// serializeResourcesYAML converts resources to multi-document YAML.
-func serializeResourcesYAML(resources []interface{}) ([]byte, error) {
-	return serialize.ToMultiYAML(resources)
-}
-
-// serializeResourcesJSON converts resources to JSON.
-func serializeResourcesJSON(resources []interface{}) ([]byte, error) {
-	if len(resources) == 1 {
-		return serialize.ToJSON(resources[0])
-	}
-
-	var result []byte
-	result = append(result, '[')
-	for i, r := range resources {
-		if i > 0 {
-			result = append(result, ',', '\n')
-		}
-		jsonBytes, err := serialize.ToJSON(r)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, jsonBytes...)
-	}
-	result = append(result, ']')
-	return result, nil
 }
 
 // formatLintText formats lint results as plain text.

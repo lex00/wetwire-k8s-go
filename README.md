@@ -128,25 +128,35 @@ kubectl apply -f manifests.yaml
 
 ## AI-assisted development
 
-Use with [Claude Code](https://claude.ai/claude-code) for AI-assisted development via the MCP (Model Context Protocol) server.
+### Kiro CLI Integration (Recommended)
 
-### Installation
-
-Install the MCP server binary:
+Use [Kiro CLI](https://kiro.dev) for AI-assisted infrastructure design sessions with full conversational context:
 
 ```bash
-go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s-mcp@latest
+# Install Kiro CLI
+curl -fsSL https://cli.kiro.dev/install | bash
+kiro-cli login
+
+# Run design session (auto-configures everything)
+wetwire-k8s design --provider kiro "Create a deployment for nginx with 3 replicas"
 ```
 
-### Configuration
+See [K8S-KIRO-CLI.md](docs/K8S-KIRO-CLI.md) for complete setup instructions and workflow.
 
-Add to your Claude Code MCP settings file (`~/.claude/claude_desktop_config.json` or similar):
+### Claude Code Integration
+
+Use with [Claude Code](https://claude.ai/claude-code) for direct IDE integration via the MCP (Model Context Protocol) server.
+
+#### Configuration
+
+The MCP server is built into the `wetwire-k8s` CLI. Add to your Claude Code MCP settings file (`~/.claude/claude_desktop_config.json` or similar):
 
 ```json
 {
   "mcpServers": {
     "wetwire-k8s": {
-      "command": "wetwire-k8s-mcp"
+      "command": "wetwire-k8s",
+      "args": ["mcp"]
     }
   }
 }
@@ -158,7 +168,8 @@ For debugging, set the `WETWIRE_MCP_DEBUG` environment variable:
 {
   "mcpServers": {
     "wetwire-k8s": {
-      "command": "wetwire-k8s-mcp",
+      "command": "wetwire-k8s",
+      "args": ["mcp"],
       "env": {
         "WETWIRE_MCP_DEBUG": "1"
       }
@@ -167,18 +178,18 @@ For debugging, set the `WETWIRE_MCP_DEBUG` environment variable:
 }
 ```
 
-### Available Tools
+#### Available Tools
 
 The MCP server exposes the following tools to Claude:
 
 | Tool | Description |
 |------|-------------|
-| **build** | Generate Kubernetes YAML/JSON manifests from Go code |
-| **lint** | Check Go files for wetwire-k8s patterns and best practices |
-| **import** | Convert Kubernetes YAML manifests to Go code |
-| **validate** | Validate manifests against Kubernetes schemas (requires kubeconform) |
+| **wetwire_build** | Generate Kubernetes YAML/JSON manifests from Go code |
+| **wetwire_lint** | Check Go files for wetwire-k8s patterns and best practices |
+| **wetwire_import** | Convert Kubernetes YAML manifests to Go code |
+| **wetwire_validate** | Validate manifests against Kubernetes schemas (requires kubeconform) |
 
-### Usage Examples
+#### Usage Examples
 
 Once configured, ask Claude to:
 - "Build manifests from the ./k8s directory"
