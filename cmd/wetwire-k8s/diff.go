@@ -9,7 +9,7 @@ import (
 
 	"github.com/lex00/wetwire-k8s-go/internal/build"
 	"github.com/lex00/wetwire-k8s-go/internal/roundtrip"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
 // ANSI color codes for diff output
@@ -21,13 +21,16 @@ const (
 	colorYellow = "\033[33m"
 )
 
-// diffCommand creates the diff subcommand
-func diffCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "diff",
-		Usage:     "Compare generated manifests against existing manifests",
-		ArgsUsage: "[PATH]",
-		Description: `Diff compares the generated Kubernetes manifests from Go code
+// newDiffCmd creates the diff subcommand
+func newDiffCmd() *cobra.Command {
+	var against string
+	var semantic bool
+	var useColor bool
+
+	cmd := &cobra.Command{
+		Use:   "diff [PATH]",
+		Short: "Compare generated manifests against existing manifests",
+		Long: `Diff compares the generated Kubernetes manifests from Go code
 against an existing manifest file.
 
 If PATH is not specified, the current directory is used.
@@ -39,97 +42,76 @@ Examples:
   wetwire-k8s diff --against manifest.yaml                 # Compare from current directory
   wetwire-k8s diff ./k8s --against manifest.yaml --semantic # Use semantic comparison
   wetwire-k8s diff ./k8s --against manifest.yaml --color   # Colorized output`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:     "against",
-				Aliases:  []string{"a"},
-				Usage:    "Existing manifest file to compare against (required)",
-				Required: true,
-			},
-			&cli.BoolFlag{
-				Name:  "semantic",
-				Usage: "Use semantic comparison (ignores ordering and whitespace)",
-				Value: false,
-			},
-			&cli.BoolFlag{
-				Name:  "color",
-				Usage: "Enable colorized output",
-				Value: false,
-			},
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Determine source path
+			sourcePath := "."
+			if len(args) > 0 {
+				sourcePath = args[0]
+			}
+
+			// Resolve to absolute path
+			absPath, err := filepath.Abs(sourcePath)
+			if err != nil {
+				return fmt.Errorf("failed to resolve path: %w", err)
+			}
+
+			// Validate source path exists
+			if _, err := os.Stat(absPath); err != nil {
+				return fmt.Errorf("source path does not exist: %s", absPath)
+			}
+
+			// Get the --against manifest file
+			if against == "" {
+				return fmt.Errorf("--against flag is required")
+			}
+
+			// Resolve against path
+			againstPath, err := filepath.Abs(against)
+			if err != nil {
+				return fmt.Errorf("failed to resolve against path: %w", err)
+			}
+
+			// Read the existing manifest
+			existingData, err := os.ReadFile(againstPath)
+			if err != nil {
+				return fmt.Errorf("failed to read manifest file: %w", err)
+			}
+
+			// Run the build pipeline
+			result, err := build.Build(absPath, build.Options{
+				OutputMode: build.SingleFile,
+			})
+			if err != nil {
+				return fmt.Errorf("build failed: %w", err)
+			}
+
+			// Generate YAML output from build
+			var generatedData []byte
+			if len(result.OrderedResources) > 0 {
+				generatedData, err = generateOutput(result.OrderedResources, "yaml")
+				if err != nil {
+					return fmt.Errorf("failed to generate output: %w", err)
+				}
+			}
+
+			// Get output writer
+			writer := cmd.OutOrStdout()
+
+			if semantic {
+				return runSemanticDiff(writer, existingData, generatedData, useColor)
+			}
+
+			return runTextDiff(writer, existingData, generatedData, useColor)
 		},
-		Action: runDiff,
-	}
-}
-
-// runDiff executes the diff command
-func runDiff(c *cli.Context) error {
-	// Determine source path
-	sourcePath := c.Args().First()
-	if sourcePath == "" {
-		sourcePath = "."
 	}
 
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve path: %w", err)
-	}
+	cmd.Flags().StringVarP(&against, "against", "a", "", "Existing manifest file to compare against (required)")
+	cmd.Flags().BoolVar(&semantic, "semantic", false, "Use semantic comparison (ignores ordering and whitespace)")
+	cmd.Flags().BoolVar(&useColor, "color", false, "Enable colorized output")
+	_ = cmd.MarkFlagRequired("against")
 
-	// Validate source path exists
-	if _, err := os.Stat(absPath); err != nil {
-		return fmt.Errorf("source path does not exist: %s", absPath)
-	}
-
-	// Get the --against manifest file
-	againstFile := c.String("against")
-	if againstFile == "" {
-		return fmt.Errorf("--against flag is required")
-	}
-
-	// Resolve against path
-	againstPath, err := filepath.Abs(againstFile)
-	if err != nil {
-		return fmt.Errorf("failed to resolve against path: %w", err)
-	}
-
-	// Read the existing manifest
-	existingData, err := os.ReadFile(againstPath)
-	if err != nil {
-		return fmt.Errorf("failed to read manifest file: %w", err)
-	}
-
-	// Run the build pipeline
-	result, err := build.Build(absPath, build.Options{
-		OutputMode: build.SingleFile,
-	})
-	if err != nil {
-		return fmt.Errorf("build failed: %w", err)
-	}
-
-	// Generate YAML output from build
-	var generatedData []byte
-	if len(result.OrderedResources) > 0 {
-		generatedData, err = generateOutput(result.OrderedResources, "yaml")
-		if err != nil {
-			return fmt.Errorf("failed to generate output: %w", err)
-		}
-	}
-
-	// Get output writer
-	writer := c.App.Writer
-	if writer == nil {
-		writer = os.Stdout
-	}
-
-	// Determine diff mode
-	semantic := c.Bool("semantic")
-	useColor := c.Bool("color")
-
-	if semantic {
-		return runSemanticDiff(writer, existingData, generatedData, useColor)
-	}
-
-	return runTextDiff(writer, existingData, generatedData, useColor)
+	return cmd
 }
 
 // runSemanticDiff performs semantic comparison of YAML documents

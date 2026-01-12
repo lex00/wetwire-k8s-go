@@ -10,17 +10,19 @@ import (
 	"text/tabwriter"
 
 	"github.com/lex00/wetwire-k8s-go/internal/discover"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
-// listCommand creates the list subcommand
-func listCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "list",
-		Usage:     "List discovered Kubernetes resources",
-		ArgsUsage: "[PATH]",
-		Description: `List parses Go source files and displays discovered Kubernetes resources.
+// newListCmd creates the list subcommand
+func newListCmd() *cobra.Command {
+	var format string
+	var all bool
+
+	cmd := &cobra.Command{
+		Use:   "list [PATH]",
+		Short: "List discovered Kubernetes resources",
+		Long: `List parses Go source files and displays discovered Kubernetes resources.
 
 If PATH is not specified, the current directory is used.
 
@@ -29,22 +31,77 @@ Examples:
   wetwire-k8s list ./k8s                # List from specific directory
   wetwire-k8s list -f json              # Output as JSON
   wetwire-k8s list --all                # Include dependency information`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "format",
-				Aliases: []string{"f"},
-				Usage:   "Output format: table, json, or yaml",
-				Value:   "table",
-			},
-			&cli.BoolFlag{
-				Name:    "all",
-				Aliases: []string{"a"},
-				Usage:   "Show dependency information",
-				Value:   false,
-			},
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validate format early
+			format = strings.ToLower(format)
+			if format != "table" && format != "json" && format != "yaml" {
+				return fmt.Errorf("invalid format %q: must be 'table', 'json', or 'yaml'", format)
+			}
+
+			// Determine source path
+			sourcePath := "."
+			if len(args) > 0 {
+				sourcePath = args[0]
+			}
+
+			// Resolve to absolute path
+			absPath, err := filepath.Abs(sourcePath)
+			if err != nil {
+				return fmt.Errorf("failed to resolve path: %w", err)
+			}
+
+			// Validate source path exists
+			if _, err := os.Stat(absPath); err != nil {
+				return fmt.Errorf("source path does not exist: %s", absPath)
+			}
+
+			// Discover resources
+			resources, err := discoverResourcesForList(absPath)
+			if err != nil {
+				return fmt.Errorf("discovery failed: %w", err)
+			}
+
+			// Get output writer
+			writer := cmd.OutOrStdout()
+
+			// Check if we have resources
+			if len(resources) == 0 {
+				fmt.Fprintln(writer, "No resources found")
+				return nil
+			}
+
+			// Convert to resourceInfo
+			showDeps := all
+			infos := make([]resourceInfo, len(resources))
+			for i, r := range resources {
+				infos[i] = resourceInfo{
+					Name: r.Name,
+					Type: r.Type,
+					File: r.File,
+					Line: r.Line,
+				}
+				if showDeps {
+					infos[i].Dependencies = r.Dependencies
+				}
+			}
+
+			// Output in requested format
+			switch format {
+			case "json":
+				return outputJSON(writer, infos)
+			case "yaml":
+				return outputYAML(writer, infos)
+			default:
+				return outputTable(writer, infos, showDeps)
+			}
 		},
-		Action: runList,
 	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format: table, json, or yaml")
+	cmd.Flags().BoolVarP(&all, "all", "a", false, "Show dependency information")
+
+	return cmd
 }
 
 // resourceInfo represents a discovered resource for output
@@ -54,72 +111,6 @@ type resourceInfo struct {
 	File         string   `json:"file" yaml:"file"`
 	Line         int      `json:"line" yaml:"line"`
 	Dependencies []string `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
-}
-
-// runList executes the list command
-func runList(c *cli.Context) error {
-	// Determine source path
-	sourcePath := c.Args().First()
-	if sourcePath == "" {
-		sourcePath = "."
-	}
-
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve path: %w", err)
-	}
-
-	// Validate source path exists
-	if _, err := os.Stat(absPath); err != nil {
-		return fmt.Errorf("source path does not exist: %s", absPath)
-	}
-
-	// Discover resources
-	resources, err := discoverResourcesForList(absPath)
-	if err != nil {
-		return fmt.Errorf("discovery failed: %w", err)
-	}
-
-	// Get output writer
-	writer := c.App.Writer
-	if writer == nil {
-		writer = os.Stdout
-	}
-
-	// Check if we have resources
-	if len(resources) == 0 {
-		fmt.Fprintln(writer, "No resources found")
-		return nil
-	}
-
-	// Convert to resourceInfo
-	showDeps := c.Bool("all")
-	infos := make([]resourceInfo, len(resources))
-	for i, r := range resources {
-		infos[i] = resourceInfo{
-			Name: r.Name,
-			Type: r.Type,
-			File: r.File,
-			Line: r.Line,
-		}
-		if showDeps {
-			infos[i].Dependencies = r.Dependencies
-		}
-	}
-
-	// Output in requested format
-	format := strings.ToLower(c.String("format"))
-	switch format {
-	case "json":
-		return outputJSON(writer, infos)
-	case "yaml":
-		return outputYAML(writer, infos)
-	case "table":
-		return outputTable(writer, infos, showDeps)
-	default:
-		return fmt.Errorf("invalid format %q: must be 'table', 'json', or 'yaml'", format)
-	}
 }
 
 // discoverResourcesForList discovers resources from the given path

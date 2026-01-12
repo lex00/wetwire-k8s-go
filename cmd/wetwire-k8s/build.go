@@ -10,16 +10,19 @@ import (
 	"github.com/lex00/wetwire-k8s-go/internal/build"
 	"github.com/lex00/wetwire-k8s-go/internal/discover"
 	"github.com/lex00/wetwire-k8s-go/internal/serialize"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
-// buildCommand creates the build subcommand
-func buildCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "build",
-		Usage:     "Generate Kubernetes YAML manifests from Go code",
-		ArgsUsage: "[PATH]",
-		Description: `Build parses Go source files, discovers Kubernetes resource declarations,
+// newBuildCmd creates the build subcommand
+func newBuildCmd() *cobra.Command {
+	var output string
+	var format string
+	var dryRun bool
+
+	cmd := &cobra.Command{
+		Use:   "build [PATH]",
+		Short: "Generate Kubernetes YAML manifests from Go code",
+		Long: `Build parses Go source files, discovers Kubernetes resource declarations,
 and generates YAML or JSON manifests.
 
 If PATH is not specified, the current directory is used.
@@ -29,120 +32,95 @@ Examples:
   wetwire-k8s build ./k8s              # Build from specific directory
   wetwire-k8s build -o manifests.yaml  # Save output to file
   wetwire-k8s build -f json            # Output as JSON`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "Output file path (use '-' for stdout)",
-				Value:   "-",
-			},
-			&cli.StringFlag{
-				Name:    "format",
-				Aliases: []string{"f"},
-				Usage:   "Output format: yaml or json",
-				Value:   "yaml",
-			},
-			&cli.BoolFlag{
-				Name:  "dry-run",
-				Usage: "Show output without writing to file",
-				Value: false,
-			},
-		},
-		Action: runBuild,
-	}
-}
-
-// runBuild executes the build command
-func runBuild(c *cli.Context) error {
-	// Determine source path
-	sourcePath := c.Args().First()
-	if sourcePath == "" {
-		sourcePath = "."
-	}
-
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve path: %w", err)
-	}
-
-	// Validate source path exists
-	if _, err := os.Stat(absPath); err != nil {
-		return fmt.Errorf("source path does not exist: %s", absPath)
-	}
-
-	// Validate format
-	format := strings.ToLower(c.String("format"))
-	if format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid format %q: must be 'yaml' or 'json'", format)
-	}
-
-	// Run the build pipeline
-	result, err := build.Build(absPath, build.Options{
-		OutputMode: build.SingleFile,
-	})
-	if err != nil {
-		return fmt.Errorf("build failed: %w", err)
-	}
-
-	// No resources found
-	if len(result.OrderedResources) == 0 {
-		return nil
-	}
-
-	// Generate output
-	output, err := generateOutput(result.OrderedResources, format)
-	if err != nil {
-		return fmt.Errorf("failed to generate output: %w", err)
-	}
-
-	// Determine output destination
-	outputPath := c.String("output")
-	dryRun := c.Bool("dry-run")
-
-	// Get the writer for output
-	var writer io.Writer
-	if outputPath == "-" || dryRun {
-		// Write to stdout (or app's writer for testing)
-		writer = c.App.Writer
-		if writer == nil {
-			writer = os.Stdout
-		}
-	} else {
-		// Write to file
-		if !dryRun {
-			// Create output directory if needed
-			outputDir := filepath.Dir(outputPath)
-			if err := os.MkdirAll(outputDir, 0755); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Determine source path
+			sourcePath := "."
+			if len(args) > 0 {
+				sourcePath = args[0]
 			}
 
-			file, err := os.Create(outputPath)
+			// Resolve to absolute path
+			absPath, err := filepath.Abs(sourcePath)
 			if err != nil {
-				return fmt.Errorf("failed to create output file: %w", err)
+				return fmt.Errorf("failed to resolve path: %w", err)
 			}
-			defer file.Close()
-			writer = file
-		}
+
+			// Validate source path exists
+			if _, err := os.Stat(absPath); err != nil {
+				return fmt.Errorf("source path does not exist: %s", absPath)
+			}
+
+			// Validate format
+			format = strings.ToLower(format)
+			if format != "yaml" && format != "json" {
+				return fmt.Errorf("invalid format %q: must be 'yaml' or 'json'", format)
+			}
+
+			// Run the build pipeline
+			result, err := build.Build(absPath, build.Options{
+				OutputMode: build.SingleFile,
+			})
+			if err != nil {
+				return fmt.Errorf("build failed: %w", err)
+			}
+
+			// No resources found
+			if len(result.OrderedResources) == 0 {
+				return nil
+			}
+
+			// Generate output
+			outputBytes, err := generateOutput(result.OrderedResources, format)
+			if err != nil {
+				return fmt.Errorf("failed to generate output: %w", err)
+			}
+
+			// Determine output destination
+			var writer io.Writer
+			if output == "-" || dryRun {
+				// Write to stdout
+				writer = cmd.OutOrStdout()
+			} else {
+				// Write to file
+				if !dryRun {
+					// Create output directory if needed
+					outputDir := filepath.Dir(output)
+					if err := os.MkdirAll(outputDir, 0755); err != nil {
+						return fmt.Errorf("failed to create output directory: %w", err)
+					}
+
+					file, err := os.Create(output)
+					if err != nil {
+						return fmt.Errorf("failed to create output file: %w", err)
+					}
+					defer file.Close()
+					writer = file
+				}
+			}
+
+			// If dry-run with output file, still write to stdout
+			if dryRun && output != "-" {
+				writer = cmd.OutOrStdout()
+			}
+
+			// Write output
+			if writer != nil {
+				_, err = writer.Write(outputBytes)
+				if err != nil {
+					return fmt.Errorf("failed to write output: %w", err)
+				}
+			}
+
+			return nil
+		},
 	}
 
-	// If dry-run with output file, still write to stdout
-	if dryRun && outputPath != "-" {
-		writer = c.App.Writer
-		if writer == nil {
-			writer = os.Stdout
-		}
-	}
+	cmd.Flags().StringVarP(&output, "output", "o", "-", "Output file path (use '-' for stdout)")
+	cmd.Flags().StringVarP(&format, "format", "f", "yaml", "Output format: yaml or json")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show output without writing to file")
 
-	// Write output
-	if writer != nil {
-		_, err = writer.Write(output)
-		if err != nil {
-			return fmt.Errorf("failed to write output: %w", err)
-		}
-	}
-
-	return nil
+	return cmd
 }
 
 // generateOutput creates the serialized output from discovered resources

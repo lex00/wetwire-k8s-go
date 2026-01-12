@@ -12,7 +12,7 @@ import (
 	"github.com/lex00/wetwire-core-go/agent/agents"
 	"github.com/lex00/wetwire-core-go/agent/orchestrator"
 	"github.com/lex00/wetwire-core-go/agent/results"
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
 // K8sDomain returns the Kubernetes domain configuration for the RunnerAgent.
@@ -36,12 +36,17 @@ Always run_lint after writing files, and fix any issues before running build.`,
 	}
 }
 
-// designCommand creates the design subcommand.
-func designCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "design",
-		Usage: "AI-assisted Kubernetes infrastructure generation",
-		Description: `Design uses AI to generate Kubernetes infrastructure code based on
+// newDesignCmd creates the design subcommand.
+func newDesignCmd() *cobra.Command {
+	var prompt string
+	var outputDir string
+	var maxLintCycles int
+	var stream bool
+
+	cmd := &cobra.Command{
+		Use:   "design",
+		Short: "AI-assisted Kubernetes infrastructure generation",
+		Long: `Design uses AI to generate Kubernetes infrastructure code based on
 natural language descriptions.
 
 The AI agent will:
@@ -53,100 +58,81 @@ The AI agent will:
 Examples:
   wetwire-k8s design --prompt "Create a web app with 3 replicas"
   wetwire-k8s design --output-dir ./infra --prompt "Full microservice stack"`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:     "prompt",
-				Usage:    "Natural language description of the infrastructure to generate",
-				Required: true,
-			},
-			&cli.StringFlag{
-				Name:    "output-dir",
-				Aliases: []string{"o"},
-				Usage:   "Output directory for generated code",
-				Value:   ".",
-			},
-			&cli.IntFlag{
-				Name:  "max-lint-cycles",
-				Usage: "Maximum lint/fix cycles",
-				Value: 3,
-			},
-			&cli.BoolFlag{
-				Name:  "stream",
-				Usage: "Stream AI responses",
-				Value: true,
-			},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if prompt == "" {
+				return fmt.Errorf("--prompt flag is required")
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Handle interrupt
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			go func() {
+				<-sigCh
+				fmt.Println("\nInterrupted, cleaning up...")
+				cancel()
+			}()
+
+			// Create session for tracking
+			session := results.NewSession("human", "design")
+
+			// Create human developer (reads from stdin)
+			reader := bufio.NewReader(os.Stdin)
+			developer := orchestrator.NewHumanDeveloper(func() (string, error) {
+				return reader.ReadString('\n')
+			})
+
+			// Create stream handler if streaming enabled
+			var streamHandler agents.StreamHandler
+			if stream {
+				streamHandler = func(text string) {
+					fmt.Print(text)
+				}
+			}
+
+			// Create runner agent with K8s domain config
+			runner, err := agents.NewRunnerAgent(agents.RunnerConfig{
+				Domain:        K8sDomain(),
+				WorkDir:       outputDir,
+				MaxLintCycles: maxLintCycles,
+				Session:       session,
+				Developer:     developer,
+				StreamHandler: streamHandler,
+			})
+			if err != nil {
+				return fmt.Errorf("creating runner: %w", err)
+			}
+
+			fmt.Println("Starting AI-assisted design session...")
+			fmt.Println("The AI will ask questions and generate infrastructure code.")
+			fmt.Println("Press Ctrl+C to stop.")
+			fmt.Println()
+
+			// Run the agent
+			if err := runner.Run(ctx, prompt); err != nil {
+				return fmt.Errorf("design session failed: %w", err)
+			}
+
+			// Print summary
+			fmt.Println("\n--- Session Summary ---")
+			fmt.Printf("Generated files: %d\n", len(runner.GetGeneratedFiles()))
+			for _, f := range runner.GetGeneratedFiles() {
+				fmt.Printf("  - %s\n", f)
+			}
+			fmt.Printf("Lint cycles: %d\n", runner.GetLintCycles())
+			fmt.Printf("Lint passed: %v\n", runner.LintPassed())
+
+			return nil
 		},
-		Action: runDesign,
-	}
-}
-
-// runDesign executes the design command using the core-go RunnerAgent.
-func runDesign(c *cli.Context) error {
-	prompt := c.String("prompt")
-	outputDir := c.String("output-dir")
-	maxLintCycles := c.Int("max-lint-cycles")
-	stream := c.Bool("stream")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle interrupt
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		fmt.Println("\nInterrupted, cleaning up...")
-		cancel()
-	}()
-
-	// Create session for tracking
-	session := results.NewSession("human", "design")
-
-	// Create human developer (reads from stdin)
-	reader := bufio.NewReader(os.Stdin)
-	developer := orchestrator.NewHumanDeveloper(func() (string, error) {
-		return reader.ReadString('\n')
-	})
-
-	// Create stream handler if streaming enabled
-	var streamHandler agents.StreamHandler
-	if stream {
-		streamHandler = func(text string) {
-			fmt.Print(text)
-		}
 	}
 
-	// Create runner agent with K8s domain config
-	runner, err := agents.NewRunnerAgent(agents.RunnerConfig{
-		Domain:        K8sDomain(),
-		WorkDir:       outputDir,
-		MaxLintCycles: maxLintCycles,
-		Session:       session,
-		Developer:     developer,
-		StreamHandler: streamHandler,
-	})
-	if err != nil {
-		return fmt.Errorf("creating runner: %w", err)
-	}
+	cmd.Flags().StringVar(&prompt, "prompt", "", "Natural language description of the infrastructure to generate")
+	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", ".", "Output directory for generated code")
+	cmd.Flags().IntVar(&maxLintCycles, "max-lint-cycles", 3, "Maximum lint/fix cycles")
+	cmd.Flags().BoolVar(&stream, "stream", true, "Stream AI responses")
+	_ = cmd.MarkFlagRequired("prompt")
 
-	fmt.Println("Starting AI-assisted design session...")
-	fmt.Println("The AI will ask questions and generate infrastructure code.")
-	fmt.Println("Press Ctrl+C to stop.")
-	fmt.Println()
-
-	// Run the agent
-	if err := runner.Run(ctx, prompt); err != nil {
-		return fmt.Errorf("design session failed: %w", err)
-	}
-
-	// Print summary
-	fmt.Println("\n--- Session Summary ---")
-	fmt.Printf("Generated files: %d\n", len(runner.GetGeneratedFiles()))
-	for _, f := range runner.GetGeneratedFiles() {
-		fmt.Printf("  - %s\n", f)
-	}
-	fmt.Printf("Lint cycles: %d\n", runner.GetLintCycles())
-	fmt.Printf("Lint passed: %v\n", runner.LintPassed())
-
-	return nil
+	return cmd
 }

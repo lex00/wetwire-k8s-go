@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,15 +33,11 @@ spec:
 `), 0644)
 	require.NoError(t, err)
 
-	app := newApp()
-	output := &bytes.Buffer{}
-	app.Writer = output
-
-	err = app.Run([]string{"wetwire-k8s", "import", inputFile})
+	stdout, _, err := runTestCommand([]string{"import", inputFile})
 	assert.NoError(t, err)
 
-	assert.Contains(t, output.String(), "package main")
-	assert.Contains(t, output.String(), "var TestAppDeployment")
+	assert.Contains(t, stdout.String(), "package main")
+	assert.Contains(t, stdout.String(), "var TestAppDeployment")
 }
 
 func TestImportCommand_OutputToFile(t *testing.T) {
@@ -64,18 +59,14 @@ spec:
 `), 0644)
 	require.NoError(t, err)
 
-	app := newApp()
-	errOutput := &bytes.Buffer{}
-	app.ErrWriter = errOutput
-
-	err = app.Run([]string{"wetwire-k8s", "import", "-o", outputFile, inputFile})
+	_, stderr, err := runTestCommand([]string{"import", "-o", outputFile, inputFile})
 	assert.NoError(t, err)
 
 	content, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "package main")
 	assert.Contains(t, string(content), "corev1.Service")
-	assert.Contains(t, errOutput.String(), "Imported 1 resources")
+	assert.Contains(t, stderr.String(), "Imported 1 resources")
 }
 
 func TestImportCommand_CustomPackage(t *testing.T) {
@@ -92,13 +83,9 @@ data:
 `), 0644)
 	require.NoError(t, err)
 
-	app := newApp()
-	output := &bytes.Buffer{}
-	app.Writer = output
-
-	err = app.Run([]string{"wetwire-k8s", "import", "-p", "mypackage", inputFile})
+	stdout, _, err := runTestCommand([]string{"import", "-p", "mypackage", inputFile})
 	assert.NoError(t, err)
-	assert.Contains(t, output.String(), "package mypackage")
+	assert.Contains(t, stdout.String(), "package mypackage")
 }
 
 func TestImportCommand_VarPrefix(t *testing.T) {
@@ -113,56 +100,38 @@ metadata:
 `), 0644)
 	require.NoError(t, err)
 
-	app := newApp()
-	output := &bytes.Buffer{}
-	app.Writer = output
-
-	err = app.Run([]string{"wetwire-k8s", "import", "--var-prefix", "Staging", inputFile})
+	stdout, _, err := runTestCommand([]string{"import", "--var-prefix", "Staging", inputFile})
 	assert.NoError(t, err)
-	assert.Contains(t, output.String(), "var StagingProdNamespace")
+	assert.Contains(t, stdout.String(), "var StagingProdNamespace")
 }
 
 func TestImportCommand_MissingFile(t *testing.T) {
-	app := newApp()
-	err := app.Run([]string{"wetwire-k8s", "import"})
+	_, _, err := runTestCommand([]string{"import"})
 	assert.Error(t, err)
 }
 
 func TestImportCommand_NonExistentFile(t *testing.T) {
-	app := newApp()
-	err := app.Run([]string{"wetwire-k8s", "import", "nonexistent.yaml"})
+	_, _, err := runTestCommand([]string{"import", "nonexistent.yaml"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to read file")
 }
 
 func TestImportCommand_Help(t *testing.T) {
-	app := newApp()
-	output := &bytes.Buffer{}
-	app.Writer = output
-
-	err := app.Run([]string{"wetwire-k8s", "import", "--help"})
+	stdout, _, err := runTestCommand([]string{"import", "--help"})
 	assert.NoError(t, err)
-	assert.Contains(t, output.String(), "Convert Kubernetes YAML manifests")
+	assert.Contains(t, stdout.String(), "Import reads YAML manifests")
 }
 
 func TestHelpCommand(t *testing.T) {
-	app := newApp()
-	output := &bytes.Buffer{}
-	app.Writer = output
-
-	err := app.Run([]string{"wetwire-k8s", "--help"})
+	stdout, _, err := runTestCommand([]string{"--help"})
 	assert.NoError(t, err)
-	assert.Contains(t, output.String(), "wetwire-k8s")
-	assert.Contains(t, output.String(), "import")
-	assert.Contains(t, output.String(), "build")
+	assert.Contains(t, stdout.String(), "wetwire-k8s")
+	assert.Contains(t, stdout.String(), "import")
+	assert.Contains(t, stdout.String(), "build")
 }
 
 func TestVersionCommand(t *testing.T) {
-	app := newApp()
-	output := &bytes.Buffer{}
-	app.Writer = output
-
-	err := app.Run([]string{"wetwire-k8s", "--version"})
+	stdout, _, err := runTestCommand([]string{"--version"})
 	assert.NoError(t, err)
-	assert.Contains(t, output.String(), "wetwire-k8s")
+	assert.Contains(t, stdout.String(), "wetwire-k8s")
 }
