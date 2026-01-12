@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lex00/wetwire-core-go/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
@@ -426,4 +427,185 @@ type ContentBlock struct {
 	ID    string
 	Name  string
 	Input json.RawMessage
+}
+
+// TestDesignCommand_RealProviderWithAPIKey tests that the design command
+// calls the real provider when ANTHROPIC_API_KEY is set.
+func TestDesignCommand_RealProviderWithAPIKey(t *testing.T) {
+	// Skip if no API key is set (CI environments without keys)
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		t.Skip("ANTHROPIC_API_KEY not set, skipping real provider test")
+	}
+
+	tempDir := t.TempDir()
+
+	app := newApp()
+	output := &bytes.Buffer{}
+	app.Writer = output
+
+	// Run design command with a simple prompt
+	err := app.Run([]string{
+		"wetwire-k8s", "design",
+		"--prompt", "Create a simple nginx deployment",
+		"--output-dir", tempDir,
+	})
+
+	// The command should complete without error
+	require.NoError(t, err)
+
+	// Output should indicate LLM was called (not just printing config)
+	outputStr := output.String()
+	// Should NOT contain the placeholder message
+	assert.NotContains(t, outputStr, "Full AI agent loop requires wetwire-core-go integration")
+
+	// Should contain evidence of agent loop execution
+	assert.Contains(t, outputStr, "Agent")
+}
+
+// TestDesignCommand_AgentLoopExecution tests that the agent loop
+// properly executes tool calls and processes responses.
+func TestDesignCommand_AgentLoopExecution(t *testing.T) {
+	// Skip if no API key
+	if os.Getenv("ANTHROPIC_API_KEY") == "" {
+		t.Skip("ANTHROPIC_API_KEY not set")
+	}
+
+	tempDir := t.TempDir()
+
+	app := newApp()
+	output := &bytes.Buffer{}
+	app.Writer = output
+
+	err := app.Run([]string{
+		"wetwire-k8s", "design",
+		"--prompt", "Create a configmap named test-config",
+		"--output-dir", tempDir,
+	})
+
+	require.NoError(t, err)
+
+	// Check that files were generated in the output directory
+	files, err := filepath.Glob(filepath.Join(tempDir, "*.go"))
+	if err == nil && len(files) > 0 {
+		// Agent generated code files
+		t.Logf("Generated files: %v", files)
+	}
+}
+
+// TestRunAgentLoop tests the RunAgentLoop function directly.
+func TestRunAgentLoop(t *testing.T) {
+	tempDir := t.TempDir()
+
+	agent := NewK8sRunnerAgent(K8sRunnerConfig{
+		WorkDir: tempDir,
+	})
+
+	// Create a mock provider for testing
+	mockProvider := &TestMockProvider{
+		responses: []MockProviderResponse{
+			{
+				Content: []providers.ContentBlock{
+					{Type: "text", Text: "I'll create a configmap for you."},
+					{
+						Type:  "tool_use",
+						ID:    "tool_1",
+						Name:  "init_package",
+						Input: json.RawMessage(`{"name":"myapp"}`),
+					},
+				},
+				StopReason: providers.StopReasonToolUse,
+			},
+			{
+				Content: []providers.ContentBlock{
+					{Type: "text", Text: "Package created. Now I'll write the file."},
+					{
+						Type:  "tool_use",
+						ID:    "tool_2",
+						Name:  "write_file",
+						Input: json.RawMessage(`{"path":"myapp/configmap.go","content":"package main\n\nimport corev1 \"k8s.io/api/core/v1\"\n\nvar MyConfigMap = &corev1.ConfigMap{}\n"}`),
+					},
+				},
+				StopReason: providers.StopReasonToolUse,
+			},
+			{
+				Content: []providers.ContentBlock{
+					{Type: "text", Text: "Running lint now."},
+					{
+						Type:  "tool_use",
+						ID:    "tool_3",
+						Name:  "run_lint",
+						Input: json.RawMessage(`{"path":"myapp"}`),
+					},
+				},
+				StopReason: providers.StopReasonToolUse,
+			},
+			{
+				Content: []providers.ContentBlock{
+					{Type: "text", Text: "Done! I've created a configmap for you."},
+				},
+				StopReason: providers.StopReasonEndTurn,
+			},
+		},
+	}
+
+	ctx := context.Background()
+	err := RunAgentLoop(ctx, agent, mockProvider, "Create a configmap", nil)
+
+	require.NoError(t, err)
+
+	// Verify that the package directory was created
+	_, err = os.Stat(filepath.Join(tempDir, "myapp"))
+	assert.NoError(t, err)
+
+	// Verify that files were generated
+	assert.NotEmpty(t, agent.GetGeneratedFiles())
+}
+
+// TestMockProvider is a mock implementation of providers.Provider for testing.
+type TestMockProvider struct {
+	responses []MockProviderResponse
+	callIndex int
+}
+
+type MockProviderResponse struct {
+	Content    []providers.ContentBlock
+	StopReason providers.StopReason
+}
+
+func (p *TestMockProvider) Name() string {
+	return "mock"
+}
+
+func (p *TestMockProvider) CreateMessage(ctx context.Context, req providers.MessageRequest) (*providers.MessageResponse, error) {
+	if p.callIndex >= len(p.responses) {
+		return &providers.MessageResponse{
+			Content:    []providers.ContentBlock{{Type: "text", Text: "Done."}},
+			StopReason: providers.StopReasonEndTurn,
+		}, nil
+	}
+	resp := p.responses[p.callIndex]
+	p.callIndex++
+	return &providers.MessageResponse{
+		Content:    resp.Content,
+		StopReason: resp.StopReason,
+	}, nil
+}
+
+func (p *TestMockProvider) StreamMessage(ctx context.Context, req providers.MessageRequest, handler providers.StreamHandler) (*providers.MessageResponse, error) {
+	return p.CreateMessage(ctx, req)
+}
+
+// TestNewAnthropicProvider tests that we can create an Anthropic provider.
+func TestNewAnthropicProvider(t *testing.T) {
+	// Skip if no API key
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		t.Skip("ANTHROPIC_API_KEY not set")
+	}
+
+	provider, err := NewAnthropicProvider(apiKey)
+	require.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "anthropic", provider.Name())
 }

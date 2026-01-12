@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/lex00/wetwire-core-go/providers"
+	"github.com/lex00/wetwire-core-go/providers/anthropic"
 	"github.com/lex00/wetwire-k8s-go/internal/build"
 	"github.com/lex00/wetwire-k8s-go/internal/lint"
 	"github.com/urfave/cli/v2"
@@ -431,6 +434,23 @@ Review the lint output and fix the issues.`
 	return ""
 }
 
+// GetProviderTools returns tools in the provider format.
+func (r *K8sRunnerAgent) GetProviderTools() []providers.Tool {
+	tools := r.GetTools()
+	result := make([]providers.Tool, len(tools))
+	for i, t := range tools {
+		result[i] = providers.Tool{
+			Name:        t.Name,
+			Description: t.Description,
+			InputSchema: providers.ToolInputSchema{
+				Properties: t.InputSchema.Properties,
+				Required:   t.InputSchema.Required,
+			},
+		}
+	}
+	return result
+}
+
 // GetSystemPrompt returns the K8s-specific system prompt.
 func (r *K8sRunnerAgent) GetSystemPrompt() string {
 	return `You are an infrastructure code generator using the wetwire-k8s framework.
@@ -586,16 +606,157 @@ func runDesign(c *cli.Context) error {
 		return fmt.Errorf("ANTHROPIC_API_KEY environment variable is required for anthropic provider")
 	}
 
-	// Display system prompt and tools for debugging/transparency
-	fmt.Fprintf(writer, "System Prompt:\n%s\n\n", agent.GetSystemPrompt())
-	fmt.Fprintf(writer, "Available Tools:\n")
-	for _, tool := range agent.GetTools() {
-		fmt.Fprintf(writer, "  - %s: %s\n", tool.Name, tool.Description)
+	// Create the Anthropic provider
+	provider, err := NewAnthropicProvider(config.APIKey)
+	if err != nil {
+		return fmt.Errorf("failed to create anthropic provider: %w", err)
 	}
-	fmt.Fprintf(writer, "\n")
 
-	fmt.Fprintf(writer, "Note: Full AI agent loop requires wetwire-core-go integration.\n")
-	fmt.Fprintf(writer, "To use the agent infrastructure, add wetwire-core-go as a dependency.\n")
+	fmt.Fprintf(writer, "Agent starting with provider: %s\n", provider.Name())
+	fmt.Fprintf(writer, "Prompt: %s\n\n", config.Prompt)
+
+	// Run the agent loop
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if err := RunAgentLoop(ctx, agent, provider, config.Prompt, writer); err != nil {
+		return fmt.Errorf("agent loop failed: %w", err)
+	}
+
+	// Report generated files
+	files := agent.GetGeneratedFiles()
+	if len(files) > 0 {
+		fmt.Fprintf(writer, "\nAgent completed. Generated files:\n")
+		for _, f := range files {
+			fmt.Fprintf(writer, "  - %s\n", f)
+		}
+	} else {
+		fmt.Fprintf(writer, "\nAgent completed. No files were generated.\n")
+	}
 
 	return nil
+}
+
+// NewAnthropicProvider creates a new Anthropic provider with the given API key.
+func NewAnthropicProvider(apiKey string) (providers.Provider, error) {
+	return anthropic.New(anthropic.Config{
+		APIKey: apiKey,
+	})
+}
+
+// RunAgentLoop runs the agent loop with the given provider.
+// It sends the initial prompt to the LLM, processes responses, executes tools,
+// and continues until the LLM indicates it's done (end_turn).
+func RunAgentLoop(ctx context.Context, agent *K8sRunnerAgent, provider providers.Provider, prompt string, writer io.Writer) error {
+	if writer == nil {
+		writer = io.Discard
+	}
+
+	// Build the initial message
+	messages := []providers.Message{
+		providers.NewUserMessage(prompt),
+	}
+
+	// Maximum iterations to prevent infinite loops
+	maxIterations := 50
+	iteration := 0
+
+	for iteration < maxIterations {
+		iteration++
+
+		// Create the request
+		req := providers.MessageRequest{
+			System:    agent.GetSystemPrompt(),
+			Messages:  messages,
+			Tools:     agent.GetProviderTools(),
+			MaxTokens: 4096,
+		}
+
+		// Call the provider
+		resp, err := provider.CreateMessage(ctx, req)
+		if err != nil {
+			return fmt.Errorf("provider call failed: %w", err)
+		}
+
+		// Process the response
+		var toolsCalled []string
+		var toolResults []providers.ContentBlock
+
+		for _, block := range resp.Content {
+			switch block.Type {
+			case "text":
+				fmt.Fprintf(writer, "[Agent]: %s\n", block.Text)
+			case "tool_use":
+				toolsCalled = append(toolsCalled, block.Name)
+				fmt.Fprintf(writer, "[Tool Call]: %s\n", block.Name)
+
+				// Execute the tool
+				result := agent.ExecuteTool(ctx, block.Name, block.Input)
+				fmt.Fprintf(writer, "[Tool Result]: %s\n", truncateResult(result, 200))
+
+				// Add tool result
+				toolResults = append(toolResults, providers.NewToolResult(block.ID, result, false))
+			}
+		}
+
+		// Check lint enforcement
+		if len(toolsCalled) > 0 {
+			enforcement := agent.CheckLintEnforcement(toolsCalled)
+			if enforcement != "" {
+				fmt.Fprintf(writer, "[Enforcement]: %s\n", enforcement)
+			}
+		}
+
+		// If the model stopped because it wants to use tools, continue the loop
+		if resp.StopReason == providers.StopReasonToolUse {
+			// Add the assistant's response to messages
+			messages = append(messages, providers.NewAssistantMessage(resp.Content))
+
+			// Add tool results as a user message
+			messages = append(messages, providers.NewToolResultMessage(toolResults))
+			continue
+		}
+
+		// Model finished (end_turn)
+		if resp.StopReason == providers.StopReasonEndTurn {
+			// Check completion gate
+			gate := agent.CheckCompletionGate()
+			if gate != "" {
+				fmt.Fprintf(writer, "[Completion Gate]: %s\n", gate)
+
+				// Add the assistant's response and enforcement message
+				messages = append(messages, providers.NewAssistantMessage(resp.Content))
+				messages = append(messages, providers.NewUserMessage(gate))
+				continue
+			}
+
+			// Successfully completed
+			return nil
+		}
+
+		// Handle other stop reasons
+		if resp.StopReason == providers.StopReasonMaxTokens {
+			fmt.Fprintf(writer, "[Warning]: Response was truncated due to max tokens\n")
+			// Continue the conversation
+			messages = append(messages, providers.NewAssistantMessage(resp.Content))
+			messages = append(messages, providers.NewUserMessage("Please continue where you left off."))
+			continue
+		}
+
+		// Unknown stop reason, break to avoid infinite loop
+		fmt.Fprintf(writer, "[Warning]: Unknown stop reason: %s\n", resp.StopReason)
+		return nil
+	}
+
+	return fmt.Errorf("agent loop exceeded maximum iterations (%d)", maxIterations)
+}
+
+// truncateResult truncates a result string if it exceeds maxLen.
+func truncateResult(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
