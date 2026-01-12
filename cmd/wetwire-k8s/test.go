@@ -12,6 +12,7 @@ import (
 	"github.com/lex00/wetwire-core-go/agent/orchestrator"
 	"github.com/lex00/wetwire-core-go/agent/personas"
 	"github.com/lex00/wetwire-core-go/agent/results"
+	"github.com/lex00/wetwire-k8s-go/internal/kiro"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +25,7 @@ func newTestCmd() *cobra.Command {
 	var scenario string
 	var maxLintCycles int
 	var stream bool
+	var provider string
 
 	cmd := &cobra.Command{
 		Use:   "test",
@@ -39,10 +41,16 @@ Available personas:
 
 Example:
   wetwire-k8s test --persona beginner --prompt "Create a deployment with 3 replicas"
-  wetwire-k8s test --all-personas --prompt "Create an nginx deployment"`,
+  wetwire-k8s test --all-personas --prompt "Create an nginx deployment"
+  wetwire-k8s test --provider kiro --prompt "Create nginx deployment"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if prompt == "" {
 				return fmt.Errorf("--prompt flag is required")
+			}
+
+			// Handle kiro provider
+			if provider == "kiro" {
+				return runTestKiro(prompt)
 			}
 
 			if allPersonas {
@@ -60,6 +68,7 @@ Example:
 	cmd.Flags().StringVar(&scenario, "scenario", "default", "Scenario name for tracking")
 	cmd.Flags().IntVar(&maxLintCycles, "max-lint-cycles", 3, "Maximum lint/fix cycles")
 	cmd.Flags().BoolVar(&stream, "stream", false, "Stream AI responses")
+	cmd.Flags().StringVar(&provider, "provider", "core", "AI provider to use (core, kiro)")
 	_ = cmd.MarkFlagRequired("prompt")
 
 	return cmd
@@ -179,5 +188,16 @@ func runTestSinglePersona(prompt, outputDir, personaName, scenario string, maxLi
 	fmt.Printf("Lint passed: %v\n", runner.LintPassed())
 	fmt.Printf("Questions asked: %d\n", len(session.Questions))
 
+	return nil
+}
+
+// runTestKiro runs the test command using the Kiro provider.
+func runTestKiro(prompt string) error {
+	ctx := context.Background()
+	output, err := kiro.RunTest(ctx, prompt)
+	if err != nil {
+		return fmt.Errorf("kiro test failed: %w", err)
+	}
+	fmt.Println(output)
 	return nil
 }

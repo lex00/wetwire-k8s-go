@@ -46,6 +46,7 @@ Then generate manifests:
 		newWatchCmd(),
 		newTestCmd(),
 		newDesignCmd(),
+		newMCPCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

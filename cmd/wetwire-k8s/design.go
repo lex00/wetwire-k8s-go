@@ -12,6 +12,7 @@ import (
 	"github.com/lex00/wetwire-core-go/agent/agents"
 	"github.com/lex00/wetwire-core-go/agent/orchestrator"
 	"github.com/lex00/wetwire-core-go/agent/results"
+	"github.com/lex00/wetwire-k8s-go/internal/kiro"
 	"github.com/spf13/cobra"
 )
 
@@ -42,6 +43,7 @@ func newDesignCmd() *cobra.Command {
 	var outputDir string
 	var maxLintCycles int
 	var stream bool
+	var provider string
 
 	cmd := &cobra.Command{
 		Use:   "design",
@@ -57,10 +59,16 @@ The AI agent will:
 
 Examples:
   wetwire-k8s design --prompt "Create a web app with 3 replicas"
-  wetwire-k8s design --output-dir ./infra --prompt "Full microservice stack"`,
+  wetwire-k8s design --output-dir ./infra --prompt "Full microservice stack"
+  wetwire-k8s design --provider kiro --prompt "Create nginx deployment"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if prompt == "" {
 				return fmt.Errorf("--prompt flag is required")
+			}
+
+			// Handle kiro provider
+			if provider == "kiro" {
+				return runDesignKiro(prompt)
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -132,7 +140,14 @@ Examples:
 	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", ".", "Output directory for generated code")
 	cmd.Flags().IntVar(&maxLintCycles, "max-lint-cycles", 3, "Maximum lint/fix cycles")
 	cmd.Flags().BoolVar(&stream, "stream", true, "Stream AI responses")
+	cmd.Flags().StringVar(&provider, "provider", "core", "AI provider to use (core, kiro)")
 	_ = cmd.MarkFlagRequired("prompt")
 
 	return cmd
+}
+
+// runDesignKiro runs the design command using the Kiro provider.
+func runDesignKiro(prompt string) error {
+	fmt.Println("Launching Kiro design session...")
+	return kiro.LaunchChat(kiro.AgentName, prompt)
 }
