@@ -232,6 +232,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Coverage badge** (Issue #47)
   - Added Codecov coverage badge to README.md
 
+#### Phase 8: Real AI Provider Integration (Issue #51)
+
+- **Real AI provider integration in design and test commands** (`cmd/wetwire-k8s/`)
+  - `RunAgentLoop()` function for full agent execution with LLM
+  - `NewAnthropicProvider()` helper using wetwire-core-go/providers/anthropic
+  - `GetProviderTools()` method to convert K8sRunnerAgent tools to provider format
+  - Design command now executes full agent loop when ANTHROPIC_API_KEY is set
+  - Test command uses real LLM calls when provider is not "mock"
+  - `PersonaDeveloper` type for AI-driven persona responses in test sessions
+  - Comprehensive tests for real provider integration (skip when no API key)
+
 ### Fixed
 
 - CI workflow now conditionally runs round-trip tests based on directory existence
