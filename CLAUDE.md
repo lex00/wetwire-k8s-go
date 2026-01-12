@@ -13,21 +13,26 @@ This package is part of the wetwire ecosystem, which follows a flat, declarative
 ```
 wetwire-k8s-go/
 ├── cmd/
-│   ├── wetwire-k8s/      # Main CLI binary
+│   ├── wetwire-k8s/      # Main CLI binary (build, lint, import, validate, design, test, etc.)
 │   └── wetwire-k8s-mcp/  # MCP server for Claude Code integration
+├── codegen/              # Schema fetching and code generation
+│   ├── fetch/           # Kubernetes schema fetching
+│   ├── parse/           # Schema parsing
+│   └── generate/        # Go code generation
 ├── docs/                 # Documentation
 │   ├── CLI.md           # Command reference
 │   ├── FAQ.md           # Common questions
-│   └── LINT_RULES.md    # Lint rule documentation
-├── resources/           # Generated Kubernetes resource types
-│   ├── core/v1/         # Core resources (Pod, Service, etc.)
-│   ├── apps/v1/         # Apps resources (Deployment, StatefulSet, etc.)
-│   └── .../             # Other API groups
-├── lint/                # Linting infrastructure
-├── build/               # Build system
-├── validate/            # Validation logic
-├── graph/               # Dependency graph generation
-└── examples/            # Example projects
+│   ├── LINT_RULES.md    # Lint rule documentation
+│   └── .../             # Additional docs (QUICK_START, INTERNALS, etc.)
+├── examples/            # Example projects (guestbook, web-service, etc.)
+├── internal/            # Internal packages
+│   ├── build/          # Build pipeline (6-stage: discover → validate → extract → order → serialize → emit)
+│   ├── discover/       # AST-based resource discovery
+│   ├── importer/       # YAML to Go code converter
+│   ├── lint/           # Lint engine and 25 lint rules
+│   ├── roundtrip/      # Round-trip testing infrastructure
+│   └── serialize/      # YAML/JSON serialization
+└── testdata/            # Test data files
 
 ```
 
