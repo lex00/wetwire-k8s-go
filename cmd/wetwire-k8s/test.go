@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"github.com/lex00/wetwire-core-go/agent/personas"
 	"github.com/lex00/wetwire-core-go/agent/results"
 	"github.com/lex00/wetwire-core-go/agent/scoring"
+	"github.com/lex00/wetwire-core-go/providers"
 	"github.com/urfave/cli/v2"
 )
 
@@ -196,10 +199,12 @@ func runPersonaTest(c *cli.Context, writer io.Writer, persona personas.Persona, 
 	if provider == "mock" {
 		err = runMockTest(session, persona, scenario)
 	} else {
-		// For real providers, we would call the actual LLM here
-		// For now, we'll treat non-mock providers without API keys as errors
-		err = runMockTest(session, persona, scenario)
-		fmt.Fprintf(writer, "Note: Using mock responses (provider %s requires API key)\n", provider)
+		// Use real LLM provider
+		ctx := c.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		err = runRealTest(ctx, writer, session, persona, scenario, personaDir, provider)
 	}
 
 	if err != nil {
@@ -335,4 +340,185 @@ func calculateScore(session *results.Session, persona personas.Persona, scenario
 	score.QuestionCount = questionCount
 
 	return score
+}
+
+// runRealTest runs a test with a real LLM provider.
+func runRealTest(ctx context.Context, writer io.Writer, session *results.Session, persona personas.Persona, scenario, workDir, providerName string) error {
+	// Get API key based on provider
+	var apiKey string
+	switch providerName {
+	case "anthropic":
+		apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		if apiKey == "" {
+			return fmt.Errorf("ANTHROPIC_API_KEY environment variable is required for anthropic provider")
+		}
+	case "openai":
+		apiKey = os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			return fmt.Errorf("OPENAI_API_KEY environment variable is required for openai provider")
+		}
+		// OpenAI not yet implemented
+		return fmt.Errorf("openai provider not yet implemented")
+	default:
+		return fmt.Errorf("unknown provider: %s", providerName)
+	}
+
+	// Create provider
+	provider, err := NewAnthropicProvider(apiKey)
+	if err != nil {
+		return fmt.Errorf("failed to create provider: %w", err)
+	}
+
+	// Create the K8s runner agent
+	agent := NewK8sRunnerAgent(K8sRunnerConfig{
+		WorkDir:       workDir,
+		MaxLintCycles: 3,
+		Developer:     &PersonaDeveloper{persona: persona, provider: provider},
+	})
+
+	// Record session start
+	session.AddMessage("developer", session.InitialPrompt)
+
+	// Run the agent loop
+	err = runTestAgentLoop(ctx, writer, session, agent, provider, persona)
+	if err != nil {
+		return fmt.Errorf("agent loop failed: %w", err)
+	}
+
+	// Record generated files from agent
+	session.GeneratedFiles = agent.GetGeneratedFiles()
+
+	// Record lint state
+	if agent.LintCalled() {
+		session.AddLintCycle([]string{}, 0, agent.LintPassed())
+	}
+
+	return nil
+}
+
+// PersonaDeveloper implements the Developer interface using an AI with a persona.
+type PersonaDeveloper struct {
+	persona  personas.Persona
+	provider providers.Provider
+}
+
+// Respond generates a response using the persona's system prompt.
+func (d *PersonaDeveloper) Respond(ctx context.Context, question string) (string, error) {
+	req := providers.MessageRequest{
+		System:    d.persona.SystemPrompt,
+		Messages:  []providers.Message{providers.NewUserMessage(question)},
+		MaxTokens: 1024,
+	}
+
+	resp, err := d.provider.CreateMessage(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	// Extract text from response
+	for _, block := range resp.Content {
+		if block.Type == "text" {
+			return block.Text, nil
+		}
+	}
+
+	return "", fmt.Errorf("no text in response")
+}
+
+// runTestAgentLoop runs the agent loop for testing, recording interactions in the session.
+func runTestAgentLoop(ctx context.Context, writer io.Writer, session *results.Session, agent *K8sRunnerAgent, provider providers.Provider, persona personas.Persona) error {
+	// Build the initial message
+	messages := []providers.Message{
+		providers.NewUserMessage(session.InitialPrompt),
+	}
+
+	// Maximum iterations to prevent infinite loops
+	maxIterations := 30
+	iteration := 0
+
+	for iteration < maxIterations {
+		iteration++
+
+		// Create the request
+		req := providers.MessageRequest{
+			System:    agent.GetSystemPrompt(),
+			Messages:  messages,
+			Tools:     agent.GetProviderTools(),
+			MaxTokens: 4096,
+		}
+
+		// Call the provider
+		resp, err := provider.CreateMessage(ctx, req)
+		if err != nil {
+			return fmt.Errorf("provider call failed: %w", err)
+		}
+
+		// Process the response
+		var toolsCalled []string
+		var toolResults []providers.ContentBlock
+		var responseText string
+
+		for _, block := range resp.Content {
+			switch block.Type {
+			case "text":
+				responseText += block.Text
+				fmt.Fprintf(writer, "[Runner]: %s\n", block.Text)
+			case "tool_use":
+				toolsCalled = append(toolsCalled, block.Name)
+				fmt.Fprintf(writer, "[Tool]: %s\n", block.Name)
+
+				// Handle ask_developer specially to record questions
+				if block.Name == "ask_developer" {
+					var params map[string]string
+					if err := json.Unmarshal(block.Input, &params); err == nil {
+						question := params["question"]
+						// Get response from persona
+						answer := agent.ExecuteTool(ctx, block.Name, block.Input)
+						session.AddQuestion(question, answer)
+						toolResults = append(toolResults, providers.NewToolResult(block.ID, answer, false))
+						continue
+					}
+				}
+
+				// Execute other tools
+				result := agent.ExecuteTool(ctx, block.Name, block.Input)
+				toolResults = append(toolResults, providers.NewToolResult(block.ID, result, false))
+			}
+		}
+
+		// Record assistant message
+		if responseText != "" {
+			session.AddMessage("runner", responseText)
+		}
+
+		// If the model stopped because it wants to use tools, continue the loop
+		if resp.StopReason == providers.StopReasonToolUse {
+			messages = append(messages, providers.NewAssistantMessage(resp.Content))
+			messages = append(messages, providers.NewToolResultMessage(toolResults))
+			continue
+		}
+
+		// Model finished
+		if resp.StopReason == providers.StopReasonEndTurn {
+			// Check completion gate
+			gate := agent.CheckCompletionGate()
+			if gate != "" {
+				messages = append(messages, providers.NewAssistantMessage(resp.Content))
+				messages = append(messages, providers.NewUserMessage(gate))
+				continue
+			}
+			return nil
+		}
+
+		// Handle max tokens
+		if resp.StopReason == providers.StopReasonMaxTokens {
+			messages = append(messages, providers.NewAssistantMessage(resp.Content))
+			messages = append(messages, providers.NewUserMessage("Please continue."))
+			continue
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("agent loop exceeded maximum iterations (%d)", maxIterations)
 }
