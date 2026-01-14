@@ -48,14 +48,17 @@ func TestInstall_HasToolsArray(t *testing.T) {
 	}
 
 	// Override home directory
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", homeDir)
 
 	// Override working directory for the install
-	origWd, _ := os.Getwd()
-	os.Chdir(projectDir)
-	defer os.Chdir(origWd)
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origWd) }()
 
 	// Run install
 	if err := EnsureInstalledWithForce(true); err != nil {
