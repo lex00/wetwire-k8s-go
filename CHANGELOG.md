@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated `wetwire-core-go` dependency to v1.5.4 for Kiro provider cwd fix (#75)
+  - Ensures MCP servers run in the correct working directory
+  - Added test to verify cwd is set in Kiro agent configuration
+
+### Added
+
 ### Added
 
 #### Phase 1: Foundation (Issues #1, #2, #16)
