@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Adopt wetwire-core-go/lint Severity type** (#89)
+  - Replace local Severity type with type alias from wetwire-core-go/lint
+  - Update severity constants to reference core package
+  - Upgrade wetwire-core-go to v1.16.0
+
 - **MCP Migration** (#79)
   - Migrated to auto-generated MCP server using `domain.BuildMCPServer()`
   - Updated `wetwire-core-go` dependency to v1.13.0
