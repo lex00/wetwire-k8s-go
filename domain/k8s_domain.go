@@ -193,6 +193,78 @@ func (l *k8sLinter) Lint(ctx *Context, path string, opts LintOpts) (*Result, err
 type k8sInitializer struct{}
 
 func (i *k8sInitializer) Init(ctx *Context, path string, opts InitOpts) (*Result, error) {
+	// Use opts.Path if provided, otherwise fall back to path argument
+	targetPath := opts.Path
+	if targetPath == "" || targetPath == "." {
+		targetPath = path
+	}
+
+	// Handle scenario initialization
+	if opts.Scenario {
+		return i.initScenario(ctx, targetPath, opts)
+	}
+
+	// Basic project initialization
+	return i.initProject(ctx, targetPath, opts)
+}
+
+// initScenario creates a full scenario structure with prompts and expected outputs
+func (i *k8sInitializer) initScenario(ctx *Context, path string, opts InitOpts) (*Result, error) {
+	name := opts.Name
+	if name == "" {
+		name = filepath.Base(path)
+	}
+
+	description := opts.Description
+	if description == "" {
+		description = "Kubernetes manifest scenario"
+	}
+
+	// Use core's scenario scaffolding
+	scenario := coredomain.ScaffoldScenario(name, description, "k8s")
+	created, err := coredomain.WriteScenario(path, scenario)
+	if err != nil {
+		return nil, fmt.Errorf("write scenario: %w", err)
+	}
+
+	// Create k8s-specific expected directory structure
+	expectedK8sDir := filepath.Join(path, "expected", "k8s")
+	if err := os.MkdirAll(expectedK8sDir, 0755); err != nil {
+		return nil, fmt.Errorf("create expected/k8s directory: %w", err)
+	}
+
+	// Create example namespace in expected/k8s/
+	exampleNamespace := `package k8s
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// AppNamespace defines the namespace for the application
+var AppNamespace = &corev1.Namespace{
+	ObjectMeta: metav1.ObjectMeta{
+		Name: "my-app",
+		Labels: map[string]string{
+			"app.kubernetes.io/name": "my-app",
+		},
+	},
+}
+`
+	nsPath := filepath.Join(expectedK8sDir, "namespace.go")
+	if err := os.WriteFile(nsPath, []byte(exampleNamespace), 0644); err != nil {
+		return nil, fmt.Errorf("write example namespace: %w", err)
+	}
+	created = append(created, "expected/k8s/namespace.go")
+
+	return NewResultWithData(
+		fmt.Sprintf("Created scenario %s with %d files", name, len(created)),
+		created,
+	), nil
+}
+
+// initProject creates a basic project with example Kubernetes resources
+func (i *k8sInitializer) initProject(ctx *Context, path string, opts InitOpts) (*Result, error) {
 	// Create directory
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, fmt.Errorf("create directory: %w", err)
