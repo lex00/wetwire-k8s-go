@@ -4,44 +4,23 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
+	"github.com/lex00/wetwire-k8s-go/domain"
 )
 
 // Version is set at build time
 var Version = "dev"
 
 func main() {
-	rootCmd := &cobra.Command{
-		Use:     "wetwire-k8s",
-		Short:   "Kubernetes manifest synthesis from Go code",
-		Version: Version,
-		Long: `wetwire-k8s generates Kubernetes YAML manifests from Go code.
+	// Set the version in the domain
+	domain.Version = Version
 
-Define your Kubernetes resources using native Go syntax:
+	// Create the domain and root command
+	d := &domain.K8sDomain{}
+	rootCmd := domain.CreateRootCommand(d)
 
-    var MyDeployment = &appsv1.Deployment{
-        ObjectMeta: metav1.ObjectMeta{
-            Name: "my-app",
-        },
-        Spec: appsv1.DeploymentSpec{
-            Replicas: replicas(3),
-            ...
-        },
-    }
-
-Then generate manifests:
-
-    wetwire-k8s build ./k8s`,
-	}
-
+	// Add custom commands that are not part of the standard domain interface
 	rootCmd.AddCommand(
-		newBuildCmd(),
 		newImportCmd(),
-		newValidateCmd(),
-		newLintCmd(),
-		newListCmd(),
-		newInitCmd(),
-		newGraphCmd(),
 		newDiffCmd(),
 		newWatchCmd(),
 		newTestCmd(),
