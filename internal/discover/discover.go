@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	coreast "github.com/lex00/wetwire-core-go/ast"
 )
 
 // DiscoverFile discovers Kubernetes resources in a single Go source file.
@@ -125,38 +127,38 @@ func DiscoverDirectory(dir string) ([]Resource, error) {
 // getResourceType extracts the Kubernetes resource type from an AST type expression.
 // Returns empty string if not a recognized K8s resource type.
 func getResourceType(typeExpr ast.Expr) string {
-	switch t := typeExpr.(type) {
-	case *ast.StarExpr:
-		// Pointer type, unwrap it
-		return getResourceType(t.X)
-	case *ast.SelectorExpr:
-		// Qualified type like appsv1.Deployment
-		if ident, ok := t.X.(*ast.Ident); ok {
-			typeName := fmt.Sprintf("%s.%s", ident.Name, t.Sel.Name)
-			if isKubernetesType(typeName) {
-				return typeName
-			}
-		}
-	case *ast.Ident:
-		// Simple identifier
-		if isKubernetesType(t.Name) {
-			return t.Name
-		}
+	typeName, pkgName := coreast.ExtractTypeName(typeExpr)
+	if typeName == "" {
+		return ""
+	}
+
+	// Build full type name if we have a package
+	fullTypeName := typeName
+	if pkgName != "" {
+		fullTypeName = fmt.Sprintf("%s.%s", pkgName, typeName)
+	}
+
+	if isKubernetesType(fullTypeName) {
+		return fullTypeName
 	}
 	return ""
 }
 
 // getResourceTypeFromExpr extracts the type from a value expression (e.g., composite literal).
 func getResourceTypeFromExpr(expr ast.Expr) string {
-	switch e := expr.(type) {
-	case *ast.UnaryExpr:
-		// Handle &Type{...}
-		if e.Op == token.AND {
-			return getResourceTypeFromExpr(e.X)
-		}
-	case *ast.CompositeLit:
-		// Handle Type{...} or &Type{...}
-		return getResourceType(e.Type)
+	typeName, pkgName := coreast.InferTypeFromValue(expr)
+	if typeName == "" {
+		return ""
+	}
+
+	// Build full type name if we have a package
+	fullTypeName := typeName
+	if pkgName != "" {
+		fullTypeName = fmt.Sprintf("%s.%s", pkgName, typeName)
+	}
+
+	if isKubernetesType(fullTypeName) {
+		return fullTypeName
 	}
 	return ""
 }
