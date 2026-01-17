@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Adopt wetwire-core-go/ast for type extraction** (#90)
+  - Replace local `getResourceType` with `coreast.ExtractTypeName`
+  - Replace local `getResourceTypeFromExpr` with `coreast.InferTypeFromValue`
+  - Keep K8s-specific `isKubernetesType` check local for domain logic
+
 - **Adopt wetwire-core-go/lint Severity type** (#89)
   - Replace local Severity type with type alias from wetwire-core-go/lint
   - Update severity constants to reference core package
