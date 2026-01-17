@@ -3,33 +3,19 @@ package lint
 import (
 	"go/ast"
 	"go/token"
+
+	corelint "github.com/lex00/wetwire-core-go/lint"
 )
 
-// Severity represents the severity level of a lint issue.
-type Severity int
+// Severity is an alias to the core lint severity type.
+type Severity = corelint.Severity
 
+// Severity constants from core lint package.
 const (
-	// SeverityError indicates a critical issue that must be fixed.
-	SeverityError Severity = iota
-	// SeverityWarning indicates an issue that should be fixed.
-	SeverityWarning
-	// SeverityInfo indicates an optional best practice suggestion.
-	SeverityInfo
+	SeverityError   = corelint.SeverityError
+	SeverityWarning = corelint.SeverityWarning
+	SeverityInfo    = corelint.SeverityInfo
 )
-
-// String returns the string representation of a severity level.
-func (s Severity) String() string {
-	switch s {
-	case SeverityError:
-		return "error"
-	case SeverityWarning:
-		return "warning"
-	case SeverityInfo:
-		return "info"
-	default:
-		return "unknown"
-	}
-}
 
 // Issue represents a lint issue found in the code.
 type Issue struct {
