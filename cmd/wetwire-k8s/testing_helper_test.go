@@ -16,13 +16,7 @@ func newTestRootCmd() *cobra.Command {
 	}
 
 	rootCmd.AddCommand(
-		newBuildCmd(),
 		newImportCmd(),
-		newValidateCmd(),
-		newLintCmd(),
-		newListCmd(),
-		newInitCmd(),
-		newGraphCmd(),
 		newDiffCmd(),
 		newWatchCmd(),
 		newTestCmd(),
