@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **MCP Migration** (#79)
+  - Migrated to auto-generated MCP server using `domain.BuildMCPServer()`
+  - Updated `wetwire-core-go` dependency to v1.13.0
+  - Replaced manual MCP tool registration with automatic domain-based generation
+  - Simplified `cmd/wetwire-k8s/mcp.go` from 381 lines to 47 lines
+  - Now supports all standard domain tools: build, lint, validate, list, graph, init
+
 - Updated `wetwire-core-go` dependency to v1.5.4 for Kiro provider cwd fix (#75)
   - Ensures MCP servers run in the correct working directory
   - Added test to verify cwd is set in Kiro agent configuration
