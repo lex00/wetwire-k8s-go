@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Split rules_workload.go for maintainability**
+  - Extracted WK8302, WK8303, WK8304 (high availability rules) into new `rules_ha.go`
+  - Reduced `rules_workload.go` from 703 lines to 299 lines
+  - All lint rule files now under 550 lines for better maintainability
+
 - **Adopt wetwire-core-go/ast for type extraction** (#90)
   - Replace local `getResourceType` with `coreast.ExtractTypeName`
   - Replace local `getResourceTypeFromExpr` with `coreast.InferTypeFromValue`
