@@ -17,15 +17,8 @@ const (
 	SeverityInfo    = corelint.SeverityInfo
 )
 
-// Issue represents a lint issue found in the code.
-type Issue struct {
-	Rule     string   // Rule ID, e.g., "WK8001"
-	Message  string   // Human-readable message
-	File     string   // Source file path
-	Line     int      // Line number
-	Column   int      // Column number
-	Severity Severity // Issue severity
-}
+// Issue is an alias to the core lint Issue type.
+type Issue = corelint.Issue
 
 // Rule represents a lint rule that can check Go source code.
 type Rule struct {
@@ -37,11 +30,8 @@ type Rule struct {
 	Fix         func(file *ast.File, issue Issue) error            // Optional auto-fix function
 }
 
-// Config represents the linter configuration.
-type Config struct {
-	DisabledRules []string // List of rule IDs to disable
-	MinSeverity   Severity // Minimum severity to report
-}
+// Config is an alias to the core lint Config type.
+type Config = corelint.Config
 
 // Context provides context for rule execution.
 type Context struct {
