@@ -3,9 +3,7 @@ package discover
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,11 +12,8 @@ import (
 
 // DiscoverFile discovers Kubernetes resources in a single Go source file.
 func DiscoverFile(filePath string) ([]Resource, error) {
-	// Create a new file set for position information
-	fset := token.NewFileSet()
-
-	// Parse the Go source file
-	file, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	// Parse the Go source file using shared utility
+	file, fset, err := coreast.ParseFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file %s: %w", filePath, err)
 	}
@@ -91,21 +86,13 @@ func DiscoverFile(filePath string) ([]Resource, error) {
 func DiscoverDirectory(dir string) ([]Resource, error) {
 	var allResources []Resource
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	opts := coreast.ParseOptions{
+		SkipTests:  true,
+		SkipVendor: true,
+		SkipHidden: true,
+	}
 
-		// Skip directories and non-Go files
-		if info.IsDir() || !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-
-		// Skip test files
-		if strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-
+	err := coreast.WalkGoFiles(dir, opts, func(path string) error {
 		// Discover resources in this file
 		resources, err := DiscoverFile(path)
 		if err != nil {
