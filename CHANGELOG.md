@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Production Kubernetes manifests from CNCF projects** (#96)
+  - Added `examples/imported/` directory with real-world manifests from Argo CD and kube-prometheus
+  - Imported 6 manifests covering different resource types:
+    - 2 Deployments (Argo CD Redis, Grafana)
+    - 3 Services (Argo CD Server, Grafana, Alertmanager)
+    - 1 ServiceAccount (Prometheus)
+  - Created comprehensive README.md documenting source projects and usage
+  - Demonstrates importer capabilities with production-grade configurations
+
 - **Multi-tier app scenario example** (#97)
   - Added `examples/multitier_scenario/` with complete scenario configuration
   - Includes scenario.yaml, system_prompt.md, and three persona prompts (beginner, intermediate, expert)
