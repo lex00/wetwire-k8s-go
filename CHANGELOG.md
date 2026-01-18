@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **LintOpts.Fix support in domain Linter** (#94)
+  - Domain `k8sLinter.Lint()` now respects `opts.Fix` option
+  - When Fix is true, auto-fixes fixable issues before reporting remaining issues
+  - Improved error messages to indicate when auto-fix was attempted
+  - Added comprehensive tests for Fix option behavior
+
 ### Added
 
 #### Phase 1: Foundation (Issues #1, #2, #16)

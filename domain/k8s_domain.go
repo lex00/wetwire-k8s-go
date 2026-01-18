@@ -161,6 +161,24 @@ func (l *k8sLinter) Lint(ctx *Context, path string, opts LintOpts) (*Result, err
 		DisabledRules: opts.Disable,
 	}
 
+	// If Fix mode is enabled, run the fixer first
+	if opts.Fix {
+		fixer := lint.NewFixer(config)
+		info, err := os.Stat(absPath)
+		if err != nil {
+			return nil, fmt.Errorf("stat path: %w", err)
+		}
+
+		if info.IsDir() {
+			_, err = fixer.FixDirectory(absPath)
+		} else {
+			_, err = fixer.FixFile(absPath)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("fix failed: %w", err)
+		}
+	}
+
 	// Create linter
 	linter := lint.NewLinter(config)
 
@@ -184,6 +202,11 @@ func (l *k8sLinter) Lint(ctx *Context, path string, opts LintOpts) (*Result, err
 			Message:  issue.Message,
 			Code:     issue.Rule,
 		})
+	}
+
+	// If Fix mode was enabled but issues remain, note that in the message
+	if opts.Fix {
+		return NewErrorResultMultiple("lint issues found (some issues could not be auto-fixed)", errs), nil
 	}
 
 	return NewErrorResultMultiple("lint issues found", errs), nil
