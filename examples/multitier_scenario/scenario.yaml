@@ -1,0 +1,30 @@
+name: multitier_scenario
+description: Generate Kubernetes resources for a multi-tier application
+
+model: sonnet
+timeout: 120s
+
+prompts:
+  default: prompts/intermediate.md
+  variants:
+    beginner: prompts/beginner.md
+    intermediate: prompts/intermediate.md
+    expert: prompts/expert.md
+
+domains:
+  - name: k8s
+    outputs:
+      - "expected/**/*.go"
+
+validation:
+  k8s:
+    resources:
+      min: 6
+    namespaces:
+      min: 1
+    deployments:
+      min: 2
+    services:
+      min: 2
+    configmaps:
+      min: 1
