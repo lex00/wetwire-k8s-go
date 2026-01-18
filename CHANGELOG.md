@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-tier app scenario example** (#97)
+  - Added `examples/multitier_scenario/` with complete scenario configuration
+  - Includes scenario.yaml, system_prompt.md, and three persona prompts (beginner, intermediate, expert)
+  - Gold standard outputs demonstrate multi-tier e-commerce application with:
+    - Namespace and ResourceQuota
+    - Frontend Deployment and LoadBalancer Service
+    - Backend Deployment and ClusterIP Service
+    - ConfigMap and Secrets for configuration
+    - NetworkPolicy for tier isolation
+    - HorizontalPodAutoscaler for frontend scaling
+  - Validates generation of at least 6 K8s resources across multiple files
+
 ### Changed
 
 - **Split rules_workload.go for maintainability**
