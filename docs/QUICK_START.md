@@ -195,6 +195,17 @@ Validate for a specific Kubernetes version:
 wetwire-k8s validate --k8s-version 1.28
 ```
 
+## AI-Assisted Design
+
+Let AI help create your Kubernetes resources:
+
+```bash
+# No API key required - uses Claude CLI
+wetwire-k8s design "Create a deployment for nginx with 3 replicas and a service"
+```
+
+The design command creates Go code following wetwire patterns, runs linting, and builds the final YAML manifests.
+
 ## Next Steps
 
 - See [examples/](../examples/) for complete working examples
