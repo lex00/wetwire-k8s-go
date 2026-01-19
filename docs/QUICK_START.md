@@ -10,17 +10,7 @@ Get started with wetwire-k8s-go in 5 minutes. This guide walks you through defin
 
 ## Installation
 
-Install the wetwire-k8s CLI:
-
-```bash
-go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s@latest
-```
-
-Verify the installation:
-
-```bash
-wetwire-k8s --help
-```
+See [README.md](../README.md#installation) for installation instructions.
 
 ## Step 1: Initialize a Project
 

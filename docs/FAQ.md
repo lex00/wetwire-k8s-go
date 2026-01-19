@@ -37,11 +37,7 @@ wetwire-k8s-go generates standard Kubernetes YAML that can be applied with `kube
 
 ### How do I install wetwire-k8s?
 
-```bash
-go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s@latest
-```
-
-This installs the `wetwire-k8s` CLI tool.
+See [README.md](../README.md#installation) for installation instructions.
 
 ### What are the prerequisites?
 

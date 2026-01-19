@@ -29,7 +29,7 @@ wetwire-k8s-go/
 │   ├── build/          # Build pipeline (6-stage: discover → validate → extract → order → serialize → emit)
 │   ├── discover/       # AST-based resource discovery
 │   ├── importer/       # YAML to Go code converter
-│   ├── lint/           # Lint engine and 25 lint rules
+│   ├── lint/           # Lint engine and 26 lint rules
 │   ├── roundtrip/      # Round-trip testing infrastructure
 │   └── serialize/      # YAML/JSON serialization
 └── testdata/            # Test data files

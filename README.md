@@ -110,11 +110,18 @@ kubectl apply -f manifests.yaml
 
 ## Documentation
 
-- [Quick Start Guide](docs/QUICK_START.md) - Step-by-step tutorial (coming soon)
-- [CLI Reference](docs/CLI.md) - Complete command documentation
-- [FAQ](docs/FAQ.md) - Common questions and answers
-- [Lint Rules](docs/LINT_RULES.md) - All lint rules with examples
-- [CLAUDE.md](CLAUDE.md) - AI assistant context for development
+**Getting Started:**
+- [Quick Start](docs/QUICK_START.md) - 5-minute tutorial
+- [FAQ](docs/FAQ.md) - Common questions
+
+**Reference:**
+- [CLI Reference](docs/CLI.md) - All commands
+- [Lint Rules](docs/LINT_RULES.md) - WK8 rule reference
+
+**Advanced:**
+- [Internals](docs/INTERNALS.md) - Architecture and extension points
+- [Adoption Guide](docs/ADOPTION.md) - Team migration strategies
+- [Import Workflow](docs/IMPORT_WORKFLOW.md) - Migrate existing configs
 
 ## Why wetwire-k8s-go?
 
