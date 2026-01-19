@@ -358,9 +358,7 @@ wetwire-k8s test --scenario deployment
 
 ## MCP server integration
 
-The MCP (Model Context Protocol) server is built into the `wetwire-k8s` CLI as a subcommand. It can be used with:
-- **Claude Code** - For direct IDE integration
-- **Kiro CLI** - For AI-assisted infrastructure design sessions (recommended)
+The MCP (Model Context Protocol) server is built into the `wetwire-k8s` CLI as a subcommand.
 
 ### Claude Code
 
@@ -383,19 +381,13 @@ This gives Claude Code access to:
 - `wetwire_validate` - Validate schemas
 - `wetwire_import` - Convert YAML to Go
 
-### Kiro CLI
+### AI-Assisted Design
 
-For AI-assisted design sessions with Kiro CLI, see [K8S-KIRO-CLI.md](docs/K8S-KIRO-CLI.md) for full setup instructions.
-
-Quick start:
+Use the design command for interactive infrastructure creation:
 
 ```bash
-# Install Kiro CLI
-curl -fsSL https://cli.kiro.dev/install | bash
-kiro-cli login
-
-# Run design session (auto-configures MCP)
-wetwire-k8s design --provider kiro "Create a deployment for nginx"
+# No API key required - uses Claude CLI as default provider
+wetwire-k8s design "Create a deployment for nginx with 3 replicas"
 ```
 
 ## See also
