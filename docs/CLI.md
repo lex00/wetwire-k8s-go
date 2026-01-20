@@ -535,7 +535,7 @@ wetwire-k8s design [OPTIONS] [PROMPT]
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
 | `--output` | `-o` | Output directory for generated code | current directory |
-| `--persona` | `-p` | AI persona (`beginner`, `intermediate`, `expert`, `terse`, `verbose`) | `intermediate` |
+| `--persona` | `-p` | AI persona (`beginner`, `intermediate`, `expert`) | `intermediate` |
 | `--max-cycles` | | Maximum lint/fix cycles | `3` |
 | `--interactive` | `-i` | Interactive mode | `true` if no prompt |
 
@@ -629,11 +629,11 @@ wetwire-k8s test -o ./results
 
 **Test personas:**
 
-- `beginner` - Verbose, educational
-- `intermediate` - Balanced
-- `expert` - Terse, advanced
-- `terse` - Minimal output
-- `verbose` - Maximum detail
+- `beginner` - Asks many questions, needs guidance
+- `intermediate` - Balanced, knows basics
+- `expert` - Deep knowledge, precise requirements
+
+Custom personas can be registered for domain-specific testing.
 
 **Test scoring:**
 
