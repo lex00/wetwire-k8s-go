@@ -11,6 +11,7 @@ import (
 	"github.com/lex00/wetwire-k8s-go/internal/build"
 	"github.com/lex00/wetwire-k8s-go/internal/discover"
 	"github.com/lex00/wetwire-k8s-go/internal/lint"
+	"github.com/lex00/wetwire-k8s-go/internal/registry"
 	"github.com/lex00/wetwire-k8s-go/internal/serialize"
 	"github.com/spf13/cobra"
 )
@@ -544,25 +545,24 @@ func parseResourceType(typeStr string) (string, string) {
 	return apiVersion, kind
 }
 
-// mapPackageToAPIVersion maps Go package aliases to Kubernetes API versions
+// mapPackageToAPIVersion maps Go package aliases to Kubernetes API versions.
+// Uses the registry for lookup, supporting both standard K8s types and CRDs.
 func mapPackageToAPIVersion(pkg string) string {
-	packageMap := map[string]string{
-		"corev1":         "v1",
-		"appsv1":         "apps/v1",
-		"batchv1":        "batch/v1",
-		"networkingv1":   "networking.k8s.io/v1",
-		"rbacv1":         "rbac.authorization.k8s.io/v1",
-		"storagev1":      "storage.k8s.io/v1",
-		"policyv1":       "policy/v1",
-		"autoscalingv1":  "autoscaling/v1",
-		"autoscalingv2":  "autoscaling/v2",
+	// Try registry first
+	if apiVersion := registry.DefaultRegistry.APIVersionForPackage(pkg); apiVersion != "" {
+		return apiVersion
+	}
+
+	// Fallback for packages not yet in registry (e.g., admission, certificates)
+	fallbackMap := map[string]string{
 		"admissionv1":    "admissionregistration.k8s.io/v1",
 		"certificatesv1": "certificates.k8s.io/v1",
 	}
 
-	if version, ok := packageMap[pkg]; ok {
+	if version, ok := fallbackMap[pkg]; ok {
 		return version
 	}
+
 	return "v1"
 }
 

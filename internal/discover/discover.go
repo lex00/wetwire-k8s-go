@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	coreast "github.com/lex00/wetwire-core-go/ast"
+	"github.com/lex00/wetwire-k8s-go/internal/registry"
 )
 
 // DiscoverFile discovers Kubernetes resources in a single Go source file.
@@ -151,35 +152,20 @@ func getResourceTypeFromExpr(expr ast.Expr) string {
 }
 
 // isKubernetesType checks if a type name is a known Kubernetes resource type.
+// Uses the registry for type lookup, supporting both standard K8s types and CRDs.
 func isKubernetesType(typeName string) bool {
-	// Check if it's a K8s API package (these are the common patterns)
-	k8sPackages := []string{
-		"corev1", "appsv1", "batchv1", "networkingv1", "rbacv1",
-		"storagev1", "policyv1", "autoscalingv1", "autoscalingv2",
+	// Use the global registry for type lookup
+	// This supports both qualified (pkg.Kind) and unqualified (Kind) names
+	if registry.DefaultRegistry.IsKnownType(typeName) {
+		return true
 	}
 
-	// If it's a qualified name (package.Type), check the package
+	// If it's a qualified name (package.Type), also check if the package is known
+	// This allows any type from a known package to be discovered
 	parts := strings.Split(typeName, ".")
 	if len(parts) == 2 {
 		pkg := parts[0]
-		for _, k8sPkg := range k8sPackages {
-			if pkg == k8sPkg {
-				return true
-			}
-		}
-	}
-
-	// Common Kubernetes resource types without package prefix
-	k8sTypes := []string{
-		"Pod", "Service", "Deployment", "ConfigMap", "Secret", "Ingress",
-		"StatefulSet", "DaemonSet", "Job", "CronJob", "Namespace",
-		"PersistentVolumeClaim", "ServiceAccount", "Role", "RoleBinding",
-		"ClusterRole", "ClusterRoleBinding", "NetworkPolicy", "StorageClass",
-		"HorizontalPodAutoscaler", "PodDisruptionBudget",
-	}
-
-	for _, k8sType := range k8sTypes {
-		if typeName == k8sType {
+		if registry.DefaultRegistry.IsKnownPackage(pkg) {
 			return true
 		}
 	}
