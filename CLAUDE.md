@@ -324,14 +324,7 @@ Some Kubernetes resources have required fields. Validation will catch missing fi
 
 ## Lint rules
 
-All lint rules use the `WK8xxx` prefix (W=Wetwire, K8=Kubernetes):
-
-- **WK8001-WK8099**: General structure and patterns
-- **WK8100-WK8199**: Resource-specific rules
-- **WK8200-WK8299**: Security and best practices
-- **WK8300-WK8399**: Performance and optimization
-
-See [docs/LINT_RULES.md](docs/LINT_RULES.md) for complete rule documentation.
+All lint rules use the `WK8xxx` prefix (W=Wetwire, K8=Kubernetes). See [docs/LINT_RULES.md](docs/LINT_RULES.md) for the complete rule reference with categories and examples.
 
 ## Testing
 

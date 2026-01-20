@@ -57,11 +57,7 @@ chore: Update dependencies
 4. Update docs/LINT_RULES.md with the new rule
 5. Update CLAUDE.md if it affects syntax guidance
 
-Lint rules use the `WK8xxx` prefix:
-- WK8001-WK8099: General structure and patterns
-- WK8100-WK8199: Resource-specific rules
-- WK8200-WK8299: Security and best practices
-- WK8300-WK8399: Performance and optimization
+Lint rules use the `WK8xxx` prefix. See [docs/LINT_RULES.md](docs/LINT_RULES.md) for the complete rule reference with category ranges.
 
 ## Adding a New CLI Command
 

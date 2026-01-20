@@ -275,10 +275,7 @@ Each rule has:
 
 ### Rule Categories
 
-- **WK8001-WK8099:** General structure (flat declarations, no loops)
-- **WK8100-WK8199:** Resource-specific (label matching, required fields)
-- **WK8200-WK8299:** Security (no hostNetwork, resource limits)
-- **WK8300-WK8399:** Performance (replica counts, resource requests)
+See [LINT_RULES.md](LINT_RULES.md) for the complete rule index with categories WK8001-WK8399.
 
 ### Auto-Fix
 
