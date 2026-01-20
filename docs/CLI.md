@@ -4,9 +4,7 @@ Complete command reference for wetwire-k8s.
 
 ## Installation
 
-```bash
-go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s@latest
-```
+See [README.md](../README.md#installation) for installation instructions.
 
 ## Global flags
 
