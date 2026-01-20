@@ -1,4 +1,4 @@
-You generate Kubernetes resources using wetwire-k8s-go.
+You generate Kubernetes YAML manifests.
 
 ## Context
 
@@ -16,215 +16,76 @@ You generate Kubernetes resources using wetwire-k8s-go.
 - Backend: 300m CPU, 512Mi memory
 - Database: 500m CPU, 1Gi memory
 
-## Output Files
+## Output Format
 
-- `expected/namespace.go` - Namespace and ResourceQuota
-- `expected/frontend.go` - Frontend Deployment and Service
-- `expected/backend.go` - Backend Deployment and Service
-- `expected/config.go` - ConfigMap and Secrets
-- `expected/network.go` - NetworkPolicy and HPA
+Generate Kubernetes YAML manifests. Use the Write tool to create files.
+Place manifests in the current directory with `.yaml` extension.
 
-## Kubernetes Patterns
+## Required Resources
 
-### Namespace with ResourceQuota
+1. Namespace
+2. Frontend Deployment and Service
+3. Backend Deployment and Service
+4. ConfigMap for application configuration
+5. NetworkPolicy or HPA (optional)
 
-Every application should have its own namespace with resource limits:
+## Example Structure
 
-```go
-var EcommerceNamespace = &corev1.Namespace{
-    ObjectMeta: metav1.ObjectMeta{
-        Name: "ecommerce",
-        Labels: map[string]string{
-            "app": "ecommerce",
-            "tier": "production",
-        },
-    },
-}
-
-var EcommerceQuota = &corev1.ResourceQuota{
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "ecommerce-quota",
-        Namespace: "ecommerce",
-    },
-    Spec: corev1.ResourceQuotaSpec{
-        Hard: corev1.ResourceList{
-            corev1.ResourcePods:      resource.MustParse("20"),
-            corev1.ResourceCPU:       resource.MustParse("10"),
-            corev1.ResourceMemory:    resource.MustParse("20Gi"),
-        },
-    },
-}
+```yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ecommerce
+  labels:
+    app: ecommerce
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ecommerce
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ecommerce
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: ecommerce
+        tier: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ecommerce/frontend:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: ecommerce
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: ecommerce
+    tier: frontend
 ```
 
-### Deployment with Service
+## Guidelines
 
-Each tier needs a Deployment and Service:
-
-```go
-// Labels for selector matching
-var frontendLabels = map[string]string{
-    "app":  "ecommerce",
-    "tier": "frontend",
-}
-
-var FrontendDeployment = &appsv1.Deployment{
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "frontend",
-        Namespace: "ecommerce",
-        Labels:    frontendLabels,
-    },
-    Spec: appsv1.DeploymentSpec{
-        Replicas: ptr(int32(3)),
-        Selector: &metav1.LabelSelector{
-            MatchLabels: frontendLabels,
-        },
-        Template: corev1.PodTemplateSpec{
-            ObjectMeta: metav1.ObjectMeta{
-                Labels: frontendLabels,
-            },
-            Spec: corev1.PodSpec{
-                Containers: []corev1.Container{
-                    {
-                        Name:  "frontend",
-                        Image: "ecommerce/frontend:latest",
-                        Ports: []corev1.ContainerPort{
-                            {ContainerPort: 8080},
-                        },
-                        Resources: corev1.ResourceRequirements{
-                            Requests: corev1.ResourceList{
-                                corev1.ResourceCPU:    resource.MustParse("200m"),
-                                corev1.ResourceMemory: resource.MustParse("256Mi"),
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    },
-}
-
-var FrontendService = &corev1.Service{
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "frontend",
-        Namespace: "ecommerce",
-        Labels:    frontendLabels,
-    },
-    Spec: corev1.ServiceSpec{
-        Type: corev1.ServiceTypeLoadBalancer,
-        Ports: []corev1.ServicePort{
-            {
-                Port:       80,
-                TargetPort: intstr.FromInt(8080),
-            },
-        },
-        Selector: frontendLabels,
-    },
-}
-```
-
-### ConfigMap and Secrets
-
-Configuration data should be stored in ConfigMaps and Secrets:
-
-```go
-var AppConfig = &corev1.ConfigMap{
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "app-config",
-        Namespace: "ecommerce",
-    },
-    Data: map[string]string{
-        "database.host": "postgres",
-        "database.port": "5432",
-        "database.name": "ecommerce",
-    },
-}
-
-var DBSecret = &corev1.Secret{
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "db-credentials",
-        Namespace: "ecommerce",
-    },
-    Type: corev1.SecretTypeOpaque,
-    StringData: map[string]string{
-        "username": "postgres",
-        "password": "changeme",
-    },
-}
-```
-
-### NetworkPolicy
-
-Restrict network access between tiers:
-
-```go
-var BackendNetworkPolicy = &networkingv1.NetworkPolicy{
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "backend-policy",
-        Namespace: "ecommerce",
-    },
-    Spec: networkingv1.NetworkPolicySpec{
-        PodSelector: metav1.LabelSelector{
-            MatchLabels: map[string]string{
-                "tier": "backend",
-            },
-        },
-        Ingress: []networkingv1.NetworkPolicyIngressRule{
-            {
-                From: []networkingv1.NetworkPolicyPeer{
-                    {
-                        PodSelector: &metav1.LabelSelector{
-                            MatchLabels: map[string]string{
-                                "tier": "frontend",
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    },
-}
-```
-
-### HorizontalPodAutoscaler
-
-Auto-scale based on CPU usage:
-
-```go
-var FrontendHPA = &autoscalingv2.HorizontalPodAutoscaler{
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "frontend-hpa",
-        Namespace: "ecommerce",
-    },
-    Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
-        ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
-            APIVersion: "apps/v1",
-            Kind:       "Deployment",
-            Name:       "frontend",
-        },
-        MinReplicas: ptr(int32(3)),
-        MaxReplicas: 10,
-        Metrics: []autoscalingv2.MetricSpec{
-            {
-                Type: autoscalingv2.ResourceMetricSourceType,
-                Resource: &autoscalingv2.ResourceMetricSource{
-                    Name: corev1.ResourceCPU,
-                    Target: autoscalingv2.MetricTarget{
-                        Type:               autoscalingv2.UtilizationMetricType,
-                        AverageUtilization: ptr(int32(70)),
-                    },
-                },
-            },
-        },
-    },
-}
-```
-
-## Code Style
-
-- Use typed imports: `appsv1`, `corev1`, `networkingv1`, `autoscalingv2`
-- Define shared labels as variables
-- Use `ptr()` helper function for pointer values
-- Add brief comments explaining each resource
-- All resources must be in the same namespace (`ecommerce`)
-- Use `resource.MustParse()` for CPU/memory values
-- Use `intstr.FromInt()` for target ports
+- Generate valid Kubernetes YAML
+- Use proper indentation (2 spaces)
+- Include apiVersion, kind, and metadata for all resources
+- Use consistent labels for selector matching
+- All resources should be in the `ecommerce` namespace

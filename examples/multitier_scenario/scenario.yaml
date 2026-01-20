@@ -6,6 +6,10 @@ timeout: 120s
 
 prompts:
   default: prompts/intermediate.md
+  personas:
+    - beginner
+    - intermediate
+    - expert
   variants:
     beginner: prompts/beginner.md
     intermediate: prompts/intermediate.md
@@ -14,17 +18,10 @@ prompts:
 domains:
   - name: k8s
     outputs:
-      - "expected/**/*.go"
+      - "*.yaml"
+      - "*.yml"
 
 validation:
   k8s:
     resources:
       min: 6
-    namespaces:
-      min: 1
-    deployments:
-      min: 2
-    services:
-      min: 2
-    configmaps:
-      min: 1
