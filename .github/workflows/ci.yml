@@ -30,9 +30,10 @@ jobs:
           SKIP_KIRO_TESTS: "1"
 
       - name: Upload coverage report
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: lex00/wetwire-k8s-go
           files: coverage.out
           fail_ci_if_error: false
 
