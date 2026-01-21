@@ -120,6 +120,29 @@ wetwire-k8s build ./k8s
 wetwire-k8s build -o manifests.yaml
 ```
 
+
+## Diff
+
+Compare Kubernetes manifests semantically:
+
+```bash
+# Compare two files
+wetwire-k8s diff file1 file2
+
+# JSON output for CI/CD
+wetwire-k8s diff file1 file2 -f json
+
+# Ignore array ordering differences
+wetwire-k8s diff file1 file2 --ignore-order
+```
+
+The diff command performs semantic comparison by resource name, detecting:
+- Added resources
+- Removed resources
+- Modified resources (with property-level change details)
+
+Exit code is 1 if differences are found, enabling CI pipeline validation.
+
 ### Linting
 
 ```bash
