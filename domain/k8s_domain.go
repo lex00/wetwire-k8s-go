@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	coredomain "github.com/lex00/wetwire-core-go/domain"
+	"github.com/lex00/wetwire-k8s-go/differ"
 	"github.com/lex00/wetwire-k8s-go/internal/build"
 	"github.com/lex00/wetwire-k8s-go/internal/discover"
 	"github.com/lex00/wetwire-k8s-go/internal/lint"
@@ -28,6 +29,10 @@ type (
 	ValidateOpts = coredomain.ValidateOpts
 	ListOpts     = coredomain.ListOpts
 	GraphOpts    = coredomain.GraphOpts
+	DiffOpts     = coredomain.DiffOpts
+	DiffResult   = coredomain.DiffResult
+	DiffEntry    = coredomain.DiffEntry
+	DiffSummary  = coredomain.DiffSummary
 	Result       = coredomain.Result
 	Error        = coredomain.Error
 )
@@ -41,6 +46,14 @@ var (
 
 // K8sDomain implements the Domain interface for Kubernetes manifest generation.
 type K8sDomain struct{}
+
+// Compile-time interface verification
+var (
+	_ coredomain.Domain       = (*K8sDomain)(nil)
+	_ coredomain.ListerDomain = (*K8sDomain)(nil)
+	_ coredomain.GrapherDomain = (*K8sDomain)(nil)
+	_ coredomain.DifferDomain = (*K8sDomain)(nil)
+)
 
 // Name returns "k8s"
 func (d *K8sDomain) Name() string {
@@ -80,6 +93,11 @@ func (d *K8sDomain) Lister() coredomain.Lister {
 // Grapher returns the K8s grapher implementation
 func (d *K8sDomain) Grapher() coredomain.Grapher {
 	return &k8sGrapher{}
+}
+
+// Differ returns the K8s differ implementation
+func (d *K8sDomain) Differ() coredomain.Differ {
+	return differ.New()
 }
 
 // CreateRootCommand creates the root command using the domain interface.
