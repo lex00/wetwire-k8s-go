@@ -3,10 +3,6 @@
   <img src="docs/wetwire-light.svg" width="100" height="67" align="right">
 </picture>
 
-  <img src="docs/wetwire-light.svg" width="100" height="67">
-</picture>
-
-
 # wetwire-k8s-go
 
 [![CI](https://github.com/lex00/wetwire-k8s-go/actions/workflows/ci.yml/badge.svg)](https://github.com/lex00/wetwire-k8s-go/actions/workflows/ci.yml)
@@ -131,6 +127,54 @@ kubectl apply -f manifests.yaml
 - [Internals](docs/INTERNALS.md) - Architecture and extension points
 - [Adoption Guide](docs/ADOPTION.md) - Team migration strategies
 - [Import Workflow](docs/IMPORT_WORKFLOW.md) - Migrate existing configs
+
+## Ecosystem
+
+wetwire-k8s-go is part of the wetwire family of infrastructure-as-code tools:
+
+```
+                         wetwire-core-go
+                               │
+       ┌───────────────────────┼───────────────────────┐
+       │                       │                       │
+       ▼                       ▼                       ▼
+┌─────────────┐         ┌─────────────┐         ┌─────────────┐
+│ wetwire-aws │         │wetwire-azure│         │ wetwire-gcp │
+│ CloudForm.  │         │  ARM/Bicep  │         │ Depl. Mgr   │
+└──────┬──────┘         └──────┬──────┘         └──────┬──────┘
+       │                       │                       │
+       ▼                       ▼                       ▼
+  Lambda, S3              Functions,              Cloud Run,
+  RDS, etc.               Storage, etc.           BigQuery, etc.
+       │                       │                       │
+       │ provisions            │ provisions            │ provisions
+       ▼                       ▼                       ▼
+┌─────────────┐         ┌─────────────┐         ┌─────────────┐
+│     EKS     │         │     AKS     │         │     GKE     │
+└──────┬──────┘         └──────┬──────┘         └──────┬──────┘
+       │                       │                       │
+       └───────────────────────┼───────────────────────┘
+                               │
+                               ▼
+                        ┌─────────────┐
+                        │ wetwire-k8s │  ← deploys workloads to any cluster
+                        │ (K8s API)   │
+                        └──────┬──────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │wetwire-observability│
+                    │                     │
+                    │  monitoring/k8s/    │ ← generic
+                    │  monitoring/eks/    │ ← AWS-specific
+                    │  monitoring/aks/    │ ← Azure-specific
+                    │  monitoring/gke/    │ ← GCP-specific
+                    └─────────────────────┘
+```
+
+- **Vendor native** (aws/azure/gcp): Provisions cloud infrastructure including managed K8s
+- **K8s native** (this repo): Deploys workloads to any K8s cluster (EKS, AKS, GKE, self-managed)
+- **Observability**: Monitors all clusters with cloud-specific flavors
 
 ## Why wetwire-k8s-go?
 
