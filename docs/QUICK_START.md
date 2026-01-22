@@ -1,4 +1,7 @@
-# Quick Start Guide
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
+  <img src="./wetwire-light.svg" width="100" height="67">
+</picture>
 
 Get started with wetwire-k8s-go in 5 minutes. This guide walks you through defining Kubernetes resources in Go and generating YAML manifests.
 

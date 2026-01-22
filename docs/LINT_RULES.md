@@ -1,4 +1,7 @@
-# Lint Rules
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
+  <img src="./wetwire-light.svg" width="100" height="67">
+</picture>
 
 This document describes all lint rules for wetwire-k8s-go.
 

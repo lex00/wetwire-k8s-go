@@ -1,4 +1,7 @@
-# Examples Guide
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
+  <img src="./wetwire-light.svg" width="100" height="67">
+</picture>
 
 This guide walks through all the example projects included with wetwire-k8s-go. Each example demonstrates different patterns and use cases.
 

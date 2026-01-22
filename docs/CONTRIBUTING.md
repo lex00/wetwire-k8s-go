@@ -1,4 +1,7 @@
-# Contributing to wetwire-k8s-go
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
+  <img src="./wetwire-light.svg" width="100" height="67">
+</picture>
 
 Thank you for your interest in contributing to wetwire-k8s-go! This guide will help you get started with development.
 

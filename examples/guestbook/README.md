@@ -1,4 +1,7 @@
-# Guestbook Example
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/wetwire-dark.svg">
+  <img src="../../docs/wetwire-light.svg" width="100" height="67">
+</picture>
 
 A multi-tier web application demonstrating the wetwire pattern with Redis and a PHP frontend.
 
