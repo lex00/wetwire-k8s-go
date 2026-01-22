@@ -43,3 +43,7 @@ Thumbs.db
 # Generated Kubernetes manifests
 *.k8s.yaml
 *.k8s.json
+
+# SVG recordings (allow mascot)
+*.svg
+!docs/wetwire.svg
