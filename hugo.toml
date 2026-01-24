@@ -40,11 +40,3 @@ theme = "wetwire"
     name = "FAQ"
     pageRef = "/faq"
     weight = 40
-  [[menus.main]]
-    name = "Contributing"
-    pageRef = "/contributing"
-    weight = 50
-  [[menus.main]]
-    name = "Troubleshooting"
-    pageRef = "/troubleshooting"
-    weight = 60

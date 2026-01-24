@@ -6,11 +6,14 @@ title: "FAQ"
 
 ## General
 
-### What is wetwire-k8s-go?
+<details>
+<summary>What is wetwire-k8s-go?</summary>
 
 wetwire-k8s-go is a Go implementation of the wetwire pattern for Kubernetes manifests. It allows you to define Kubernetes resources using native Go code with full type safety, IDE support, and AI-assisted development.
+</details>
 
-### Why use Go code instead of YAML?
+<details>
+<summary>Why use Go code instead of YAML?</summary>
 
 Go code provides several advantages:
 
@@ -20,8 +23,10 @@ Go code provides several advantages:
 - **Testing** - Unit test your infrastructure definitions
 - **AI generation** - AI can generate and modify code more reliably than YAML
 - **Refactoring** - Rename and reorganize with IDE support
+</details>
 
-### How does wetwire-k8s-go differ from other tools?
+<details>
+<summary>How does wetwire-k8s-go differ from other tools?</summary>
 
 | Tool | Approach | wetwire-k8s-go Difference |
 |------|----------|---------------------------|
@@ -30,29 +35,41 @@ Go code provides several advantages:
 | **Kustomize** | YAML patching | Programmatic composition |
 | **Pulumi** | Imperative SDK | Declarative, lint-enforced patterns |
 | **CDK8s** | Imperative constructors | Flat, AI-optimized declarations |
+</details>
 
-### Is this production-ready?
+<details>
+<summary>Is this production-ready?</summary>
 
 wetwire-k8s-go generates standard Kubernetes YAML that can be applied with `kubectl`. The tool itself is in active development. Review generated manifests before deploying to production.
+</details>
 
 ---
 
 ## Installation
 
-### How do I install wetwire-k8s?
+<details>
+<summary>How do I install wetwire-k8s?</summary>
 
-See [README.md](../README.md#installation) for installation instructions.
+```bash
+go install github.com/lex00/wetwire-k8s-go@latest
+```
 
-### What are the prerequisites?
+Requires Go 1.23 or later.
+</details>
+
+<details>
+<summary>What are the prerequisites?</summary>
 
 - Go 1.23 or later
 - Basic familiarity with Kubernetes concepts
 - (Optional) `kubectl` for diff and deployment
+</details>
 
-### How do I update to the latest version?
+<details>
+<summary>How do I update to the latest version?</summary>
 
 ```bash
-go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s@latest
+go install github.com/lex00/wetwire-k8s-go@latest
 ```
 
 Or update your `go.mod`:
@@ -60,12 +77,14 @@ Or update your `go.mod`:
 ```bash
 go get -u github.com/lex00/wetwire-k8s-go
 ```
+</details>
 
 ---
 
 ## Usage
 
-### How do I get started?
+<details>
+<summary>How do I get started?</summary>
 
 1. Initialize a new project:
    ```bash
@@ -83,8 +102,10 @@ go get -u github.com/lex00/wetwire-k8s-go
    ```bash
    kubectl apply -f manifests.yaml
    ```
+</details>
 
-### How do I define a Deployment?
+<details>
+<summary>How do I define a Deployment?</summary>
 
 ```go
 package main
@@ -125,8 +146,10 @@ var NginxDeployment = appsv1.Deployment{
 
 func ptrInt32(i int32) *int32 { return &i }
 ```
+</details>
 
-### How do I reference other resources?
+<details>
+<summary>How do I reference other resources?</summary>
 
 Use direct field references:
 
@@ -159,8 +182,10 @@ var MyDeployment = appsv1.Deployment{
     },
 }
 ```
+</details>
 
-### Can I use functions and loops?
+<details>
+<summary>Can I use functions and loops?</summary>
 
 The wetwire pattern encourages flat, declarative code. The linter will flag imperative constructs like loops and conditionals inside resource definitions.
 
@@ -184,20 +209,120 @@ var MyPod = corev1.Pod{
     },
 }
 ```
+</details>
 
-### How do I import existing YAML?
+<details>
+<summary>How do I import existing YAML?</summary>
 
 ```bash
 wetwire-k8s import -o k8s.go existing-manifests.yaml
 ```
 
 This converts YAML to Go code. Review and run `wetwire-k8s lint --fix` to apply wetwire patterns.
+</details>
+
+---
+
+## GitOps and CI/CD
+
+<details>
+<summary>How do I integrate with my GitOps workflow?</summary>
+
+wetwire-k8s-go fits naturally into GitOps workflows:
+
+1. **Store Go source in Git** - Your Kubernetes definitions are versioned Go code
+2. **CI builds manifests** - Run `wetwire-k8s build -o manifests.yaml` in your pipeline
+3. **Commit generated YAML** - Either commit to the same repo or a separate GitOps repo
+4. **ArgoCD/Flux syncs** - Point your GitOps tool at the generated manifests
+
+Example GitHub Actions step:
+```yaml
+- name: Build manifests
+  run: |
+    wetwire-k8s build -o manifests/
+    git add manifests/
+    git commit -m "Update generated manifests" || true
+```
+</details>
+
+<details>
+<summary>Can I import existing YAML manifests?</summary>
+
+Yes, use the import command:
+
+```bash
+# Import a single file
+wetwire-k8s import -o k8s.go existing-manifests.yaml
+
+# Import multiple files
+wetwire-k8s import -o k8s.go manifests/*.yaml
+
+# Import with custom package name
+wetwire-k8s import --package myapp -o k8s.go manifests.yaml
+```
+
+After importing, run `wetwire-k8s lint --fix` to apply wetwire patterns and best practices.
+</details>
+
+<details>
+<summary>How does the linter help catch errors?</summary>
+
+The linter enforces patterns that prevent common Kubernetes mistakes:
+
+- **Label selector mismatches** - Ensures Deployment selectors match Pod template labels
+- **Missing required fields** - Catches missing container names, image tags, etc.
+- **Security issues** - Warns about privileged containers, missing resource limits
+- **Naming conventions** - Enforces consistent resource naming
+- **Direct references** - Ensures dependencies are explicit and traceable
+
+Run `wetwire-k8s lint` before committing to catch issues early. Use `--fix` to auto-fix many problems.
+</details>
+
+<details>
+<summary>What's the recommended project structure?</summary>
+
+```
+my-app/
+├── go.mod
+├── go.sum
+├── k8s/
+│   ├── deployment.go    # Deployment definitions
+│   ├── service.go       # Service definitions
+│   ├── configmap.go     # ConfigMaps and Secrets
+│   └── ingress.go       # Ingress rules
+├── manifests/           # Generated YAML (optional, for GitOps)
+│   └── all.yaml
+└── Makefile
+```
+
+Organize by resource type or by application component. The build command discovers all resources regardless of file organization.
+</details>
+
+<details>
+<summary>How do I handle Helm chart generation?</summary>
+
+wetwire-k8s-go generates plain Kubernetes YAML, not Helm charts. However, you can:
+
+1. **Use wetwire-k8s for your own apps** - Generate manifests directly
+2. **Combine with Helm** - Use Helm for third-party charts, wetwire-k8s for your code
+3. **Template with Go** - Use Go's text/template if you need parameterization
+
+For values that change between environments, use Go variables or build-time flags:
+
+```go
+var Namespace = os.Getenv("K8S_NAMESPACE")
+if Namespace == "" {
+    Namespace = "default"
+}
+```
+</details>
 
 ---
 
 ## Kubernetes-specific
 
-### How do I handle multiple namespaces?
+<details>
+<summary>How do I handle multiple namespaces?</summary>
 
 Define namespace explicitly on each resource:
 
@@ -232,8 +357,10 @@ var MyDeployment = appsv1.Deployment{
     // ...
 }
 ```
+</details>
 
-### How do I set resource limits?
+<details>
+<summary>How do I set resource limits?</summary>
 
 ```go
 var MyDeployment = appsv1.Deployment{
@@ -261,8 +388,10 @@ var MyDeployment = appsv1.Deployment{
     },
 }
 ```
+</details>
 
-### How do I use Secrets?
+<details>
+<summary>How do I use Secrets?</summary>
 
 Define the Secret and reference it:
 
@@ -305,8 +434,10 @@ var MyDeployment = appsv1.Deployment{
     },
 }
 ```
+</details>
 
-### What about StatefulSets and DaemonSets?
+<details>
+<summary>What about StatefulSets and DaemonSets?</summary>
 
 They work the same way as Deployments:
 
@@ -336,24 +467,30 @@ var MyDaemonSet = appsv1.DaemonSet{
     },
 }
 ```
+</details>
 
-### How do I use Custom Resources (CRDs)?
+<details>
+<summary>How do I use Custom Resources (CRDs)?</summary>
 
 Custom Resource Definitions are not yet supported. This is planned for a future release.
+</details>
 
 ---
 
 ## Design mode
 
-### What is design mode?
+<details>
+<summary>What is design mode?</summary>
 
 Design mode is AI-assisted development where you describe what you want in natural language, and Claude generates the Go code.
+</details>
 
-### How do I use design mode?
+<details>
+<summary>How do I use design mode?</summary>
 
 **Recommended:** Use Claude Code with the MCP server:
 
-1. Install wetwire-k8s: `go install github.com/lex00/wetwire-k8s-go/cmd/wetwire-k8s@latest`
+1. Install wetwire-k8s: `go install github.com/lex00/wetwire-k8s-go@latest`
 2. Configure MCP in Claude Code settings:
    ```json
    {
@@ -373,13 +510,17 @@ Design mode is AI-assisted development where you describe what you want in natur
 export ANTHROPIC_API_KEY=your-key
 wetwire-k8s design "Create a deployment for nginx"
 ```
+</details>
 
-### Do I need an API key?
+<details>
+<summary>Do I need an API key?</summary>
 
 - **Claude Code + MCP:** No, Claude Code handles authentication
 - **CLI design command:** Yes, set `ANTHROPIC_API_KEY` environment variable
+</details>
 
-### What can I ask for?
+<details>
+<summary>What can I ask for?</summary>
 
 Examples:
 
@@ -390,8 +531,10 @@ Examples:
 - "Add resource limits and health checks to the deployment"
 
 Be specific about requirements. Claude can ask clarifying questions.
+</details>
 
-### How accurate is the generated code?
+<details>
+<summary>How accurate is the generated code?</summary>
 
 Generated code is:
 - Syntactically correct Go
@@ -400,12 +543,14 @@ Generated code is:
 - Auto-fixed by the linter
 
 Review generated code before deploying, especially for production.
+</details>
 
 ---
 
 ## Linting
 
-### What does the linter check?
+<details>
+<summary>What does the linter check?</summary>
 
 The linter enforces:
 - Flat, declarative patterns (no nested constructors, loops, conditionals)
@@ -418,16 +563,20 @@ The linter enforces:
 - Naming conventions
 
 See [Lint Rules](/lint-rules/) for complete rule list.
+</details>
 
-### How do I auto-fix issues?
+<details>
+<summary>How do I auto-fix issues?</summary>
 
 ```bash
 wetwire-k8s lint --fix
 ```
 
 Many issues can be auto-fixed. Manual fixes may be needed for complex violations.
+</details>
 
-### Can I disable specific rules?
+<details>
+<summary>Can I disable specific rules?</summary>
 
 Yes, with `--disable`:
 
@@ -443,8 +592,10 @@ lint:
     - WK8001
     - WK8002
 ```
+</details>
 
-### Why is the linter flagging my working code?
+<details>
+<summary>Why is the linter flagging my working code?</summary>
 
 The linter enforces patterns that enable static analysis and AI generation. Working code may not follow these patterns. Consider:
 
@@ -453,19 +604,23 @@ The linter enforces patterns that enable static analysis and AI generation. Work
 3. Is the code flat and declarative?
 
 If you have a valid reason for imperative code, you can disable specific rules.
+</details>
 
 ---
 
 ## Validation
 
-### What's the difference between lint and validate?
+<details>
+<summary>What's the difference between lint and validate?</summary>
 
 - **lint** - Checks Go code for wetwire patterns and best practices
 - **validate** - Checks resources against Kubernetes schemas (required fields, types, API versions)
 
 Both are run during `build` by default.
+</details>
 
-### What Kubernetes versions are supported?
+<details>
+<summary>What Kubernetes versions are supported?</summary>
 
 wetwire-k8s validates against Kubernetes 1.28 by default. Specify a different version with `--k8s-version`:
 
@@ -474,8 +629,10 @@ wetwire-k8s validate --k8s-version 1.30
 ```
 
 Supported versions: 1.24 through 1.31.
+</details>
 
-### Can I validate without building?
+<details>
+<summary>Can I validate without building?</summary>
 
 Yes:
 
@@ -484,12 +641,14 @@ wetwire-k8s validate
 ```
 
 This parses Go code and validates resources without generating YAML.
+</details>
 
 ---
 
 ## Troubleshooting
 
-### "Cannot find package" error
+<details>
+<summary>"Cannot find package" error</summary>
 
 Make sure dependencies are installed:
 
@@ -505,8 +664,10 @@ import (
     corev1 "github.com/lex00/wetwire-k8s-go/resources/core/v1"
 )
 ```
+</details>
 
-### "Undefined: ptrInt32" error
+<details>
+<summary>"Undefined: ptrInt32" error</summary>
 
 Many Kubernetes fields are pointers. Define a helper function:
 
@@ -515,16 +676,10 @@ func ptrInt32(i int32) *int32 { return &i }
 func ptrString(s string) *string { return &s }
 func ptrBool(b bool) *bool { return &b }
 ```
+</details>
 
-Or use the helpers from wetwire-core-go:
-
-```go
-import "github.com/lex00/wetwire-core-go/k8s/helpers"
-
-Replicas: helpers.Int32Ptr(3),
-```
-
-### Linter says "resource not discoverable"
+<details>
+<summary>Linter says "resource not discoverable"</summary>
 
 Resources MUST be top-level variables:
 
@@ -537,14 +692,18 @@ func createPod() corev1.Pod {
     return corev1.Pod{...}
 }
 ```
+</details>
 
-### Generated YAML is in wrong order
+<details>
+<summary>Generated YAML is in wrong order</summary>
 
 Build generates resources in dependency order. If order is still wrong, there may be a circular dependency or the dependency graph isn't detecting all references.
 
 Check that you're using direct field references (not function calls).
+</details>
 
-### "Invalid API version" error
+<details>
+<summary>"Invalid API version" error</summary>
 
 Make sure you're using the correct import:
 
@@ -555,8 +714,10 @@ import appsv1 "github.com/lex00/wetwire-k8s-go/resources/apps/v1"
 // Wrong - different version
 import appsv1beta1 "github.com/lex00/wetwire-k8s-go/resources/apps/v1beta1"
 ```
+</details>
 
-### How do I debug build issues?
+<details>
+<summary>How do I debug build issues?</summary>
 
 Enable verbose output:
 
@@ -569,69 +730,23 @@ This shows:
 - Dependency graph
 - Validation results
 - Generation steps
-
----
-
-## Comparison
-
-### How does this compare to Helm?
-
-| Aspect | Helm | wetwire-k8s-go |
-|--------|------|----------------|
-| **Syntax** | Go templates in YAML | Native Go |
-| **Type safety** | No | Yes |
-| **IDE support** | Limited | Full |
-| **Package management** | Charts | Go modules |
-| **Templating** | String templating | Go composition |
-| **AI generation** | Difficult | Optimized |
-
-Use Helm if you need a package ecosystem. Use wetwire-k8s-go if you want type safety and AI-assisted development.
-
-### How does this compare to Kustomize?
-
-| Aspect | Kustomize | wetwire-k8s-go |
-|--------|-----------|----------------|
-| **Approach** | YAML patching | Programmatic |
-| **Type safety** | No | Yes |
-| **Composition** | Overlays | Go code |
-| **IDE support** | Limited | Full |
-
-Use Kustomize if you want to stay in YAML. Use wetwire-k8s-go if you want programmatic composition with type safety.
-
-### How does this compare to Pulumi?
-
-| Aspect | Pulumi | wetwire-k8s-go |
-|--------|--------|----------------|
-| **Style** | Imperative | Declarative |
-| **State** | Pulumi service | None (kubectl) |
-| **Control flow** | Full programming | Lint-restricted |
-| **AI generation** | Complex | Simple patterns |
-
-Use Pulumi if you need stateful deployment orchestration. Use wetwire-k8s-go if you want declarative, AI-friendly code with kubectl.
-
-### How does this compare to CDK8s?
-
-| Aspect | CDK8s | wetwire-k8s-go |
-|--------|-------|----------------|
-| **Style** | Imperative constructors | Flat declarations |
-| **Languages** | Multiple | Go only |
-| **Nesting** | Deep | Flat |
-| **AI generation** | Complex | Optimized |
-
-Use CDK8s if you need multi-language support. Use wetwire-k8s-go if you want AI-optimized, flat patterns.
+</details>
 
 ---
 
 ## Getting help
 
-### Where can I find more documentation?
+<details>
+<summary>Where can I find more documentation?</summary>
 
 - [CLI Reference](/cli/) - Complete command documentation
 - [Lint Rules](/lint-rules/) - All lint rules with examples
-- [CLAUDE.md](../CLAUDE.md) - AI assistant context
-- [Wetwire Specification](https://github.com/lex00/wetwire/docs/WETWIRE_SPEC.md) - Core patterns
+- [Quick Start](/quick-start/) - Getting started guide
+- [Examples](/examples/) - Real-world manifest patterns
+</details>
 
-### How do I report bugs?
+<details>
+<summary>How do I report bugs?</summary>
 
 Open an issue on GitHub: https://github.com/lex00/wetwire-k8s-go/issues
 
@@ -641,8 +756,10 @@ Include:
 - Command that failed
 - Error output
 - Minimal reproduction example
+</details>
 
-### How do I request features?
+<details>
+<summary>How do I request features?</summary>
 
 Open a feature request on GitHub: https://github.com/lex00/wetwire-k8s-go/issues
 
@@ -650,8 +767,10 @@ Describe:
 - What you're trying to accomplish
 - Why existing features don't work
 - Example of desired syntax/behavior
+</details>
 
-### Can I contribute?
+<details>
+<summary>Can I contribute?</summary>
 
 Yes! See [Contributing](/contributing/) for guidelines.
 
@@ -661,3 +780,4 @@ Areas where contributions are especially welcome:
 - Import optimizations
 - Documentation improvements
 - Example projects
+</details>
