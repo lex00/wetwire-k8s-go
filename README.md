@@ -6,10 +6,11 @@
 # wetwire-k8s-go
 
 [![CI](https://github.com/lex00/wetwire-k8s-go/actions/workflows/ci.yml/badge.svg)](https://github.com/lex00/wetwire-k8s-go/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/lex00/wetwire-k8s-go/branch/main/graph/badge.svg)](https://codecov.io/gh/lex00/wetwire-k8s-go)
+[![Go](https://img.shields.io/badge/Go-1.25-blue?logo=go)](https://golang.org/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/lex00/wetwire-k8s-go.svg)](https://pkg.go.dev/github.com/lex00/wetwire-k8s-go)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lex00/wetwire-k8s-go)](https://goreportcard.com/report/github.com/lex00/wetwire-k8s-go)
-[![Coverage](https://codecov.io/gh/lex00/wetwire-k8s-go/branch/main/graph/badge.svg)](https://codecov.io/gh/lex00/wetwire-k8s-go)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Go implementation of the wetwire pattern for Kubernetes manifests. Define Kubernetes resources using native Go code with full type safety, IDE support, and AI-assisted development.
 
