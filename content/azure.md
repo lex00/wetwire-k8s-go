@@ -1,5 +1,6 @@
 ---
 title: "Azure Integration"
+slug: "azure"
 ---
 
 Kubernetes integration patterns for Microsoft Azure, covering AKS cluster management and Azure resource provisioning via ASO.

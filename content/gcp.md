@@ -1,5 +1,6 @@
 ---
 title: "GCP Integration"
+slug: "gcp"
 ---
 
 Kubernetes integration patterns for Google Cloud Platform, covering GKE cluster management and GCP resource provisioning via Config Connector.

@@ -1,5 +1,6 @@
 ---
 title: "AWS Integration"
+slug: "aws"
 ---
 
 Kubernetes integration patterns for Amazon Web Services, covering EKS cluster management and AWS resource provisioning via ACK.
