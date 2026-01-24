@@ -2,10 +2,6 @@
 title: "Adoption"
 ---
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
-  <img src="./wetwire-light.svg" width="100" height="67">
-</picture>
 
 This guide helps teams migrate from existing Kubernetes tooling to wetwire-k8s-go. Whether you're coming from kubectl/raw YAML, Helm, kustomize, or other IaC tools, this document provides migration strategies and comparisons.
 

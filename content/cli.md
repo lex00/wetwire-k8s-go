@@ -2,10 +2,6 @@
 title: "CLI"
 ---
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
-  <img src="./wetwire-light.svg" width="100" height="67">
-</picture>
 
 Complete command reference for wetwire-k8s.
 

@@ -2,10 +2,6 @@
 title: "Import Workflow"
 ---
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
-  <img src="./wetwire-light.svg" width="100" height="67">
-</picture>
 
 This guide walks through the complete workflow for importing existing Kubernetes YAML manifests into wetwire-k8s-go code.
 

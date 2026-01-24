@@ -2,10 +2,6 @@
 title: "Developers"
 ---
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
-  <img src="./wetwire-light.svg" width="100" height="67">
-</picture>
 
 This guide covers everything you need to contribute to wetwire-k8s-go, from setting up your development environment to submitting pull requests.
 

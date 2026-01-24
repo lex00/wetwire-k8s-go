@@ -2,10 +2,6 @@
 title: "Versioning"
 ---
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./wetwire-dark.svg">
-  <img src="./wetwire-light.svg" width="100" height="67">
-</picture>
 
 This document describes wetwire-k8s-go's versioning policy, Kubernetes compatibility, and upgrade procedures.
 
